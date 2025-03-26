@@ -6,6 +6,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 interface UseChatResult {
   users: ChatUser[];
   messages: ChatMessage[];
+  privateMessages: Map<string, ChatMessage[]>; // Keyed by username of the other participant
   connectionStatus: ConnectionStatus;
   error: string | null;
   chatMode: 'local' | 'global';
@@ -13,6 +14,7 @@ interface UseChatResult {
   connect: (username: string) => void;
   disconnect: () => void;
   sendMessage: (text: string) => void;
+  sendPrivateMessage: (text: string, recipient: string) => void;
   setChatMode: (mode: 'local' | 'global') => void;
   setRegion: (region: ChatRegion) => void;
   updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
@@ -21,6 +23,7 @@ interface UseChatResult {
 export function useChat(): UseChatResult {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [privateMessages, setPrivateMessages] = useState<Map<string, ChatMessage[]>>(new Map());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [chatMode, setChatModeState] = useState<'local' | 'global'>('global');
@@ -84,6 +87,33 @@ export function useChat(): UseChatResult {
                 text: data.text,
                 timestamp: new Date(data.timestamp),
                 type: 'user'
+              });
+            }
+            break;
+            
+          case MessageType.PRIVATE_MESSAGE:
+            if (data.username && data.text && data.timestamp && data.recipient && data.isPrivate) {
+              const privateMsg: ChatMessage = {
+                id: self.crypto.randomUUID(),
+                username: data.username,
+                text: data.text,
+                timestamp: new Date(data.timestamp),
+                type: 'user',
+                recipient: data.recipient,
+                isPrivate: true
+              };
+              
+              // Determine the key to use for storing the private message
+              // If this user sent the message, use the recipient's name as the key
+              // If this user received the message, use the sender's name as the key
+              const otherUser = data.username === usernameRef.current ? data.recipient : data.username;
+              
+              // Add to private messages map
+              setPrivateMessages(prev => {
+                const newMap = new Map(prev);
+                const existingMessages = newMap.get(otherUser) || [];
+                newMap.set(otherUser, [...existingMessages, privateMsg]);
+                return newMap;
               });
             }
             break;
@@ -196,6 +226,18 @@ export function useChat(): UseChatResult {
     }
   }, []);
   
+  // Send private message to specific user
+  const sendPrivateMessage = useCallback((text: string, recipient: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && text.trim() && recipient) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.PRIVATE_MESSAGE,
+        text,
+        recipient,
+        isPrivate: true
+      }));
+    }
+  }, []);
+  
   // Disconnect and cleanup
   const disconnect = useCallback(() => {
     if (socketRef.current) {
@@ -215,6 +257,7 @@ export function useChat(): UseChatResult {
     setConnectionStatus('disconnected');
     setUsers([]);
     setMessages([]);
+    setPrivateMessages(new Map());
   }, []);
   
   // Set chat mode and send update to server
@@ -258,6 +301,7 @@ export function useChat(): UseChatResult {
   return {
     users,
     messages,
+    privateMessages,
     connectionStatus,
     error,
     chatMode,
@@ -265,6 +309,7 @@ export function useChat(): UseChatResult {
     connect,
     disconnect,
     sendMessage,
+    sendPrivateMessage,
     setChatMode,
     setRegion,
     updateAvatar

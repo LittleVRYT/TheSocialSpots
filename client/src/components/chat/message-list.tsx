@@ -14,7 +14,7 @@ interface MessageListProps {
   }[];
 }
 
-export function MessageList({ messages, currentUsername }: MessageListProps) {
+export function MessageList({ messages, currentUsername, users = [] }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive

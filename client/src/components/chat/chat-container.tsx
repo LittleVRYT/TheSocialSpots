@@ -6,8 +6,9 @@ import { MessageInput } from "./message-input";
 import { OnlineUsers } from "./online-users";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Wifi } from "lucide-react";
-import { ChatRegion } from "@shared/schema";
+import { Globe, Wifi, MessageSquare, Users } from "lucide-react";
+import { ChatRegion, ChatMessage } from "@shared/schema";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ChatContainer() {
   const [username, setUsername] = useState<string | null>(null);

@@ -25,6 +25,8 @@ export const chatMessages = pgTable("chat_messages", {
   text: text("text").notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
   type: text("type").notNull(),
+  recipient: text("recipient"),  // For private messages; null means public message
+  isPrivate: boolean("is_private").default(false),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -70,6 +72,8 @@ export type ChatMessage = {
   text: string;
   timestamp: Date;
   type: 'user' | 'system';
+  recipient?: string;  // For private messages
+  isPrivate?: boolean; // Whether this is a private message
 };
 
 // WebSocket message types
@@ -77,6 +81,7 @@ export enum MessageType {
   JOIN = 'join',
   LEAVE = 'leave',
   CHAT = 'chat',
+  PRIVATE_MESSAGE = 'private_message',  // New message type for private messages
   USERS = 'users',
   HISTORY = 'history',
   ERROR = 'error',
@@ -90,12 +95,16 @@ export type WSMessage = {
   username?: string;
   text?: string;
   timestamp?: string;
+  recipient?: string; // For private messages
+  isPrivate?: boolean; // Flag for private messages
   users?: ChatUser[];
   messages?: Array<{
     type: string;
     username: string;
     text: string;
     timestamp: string;
+    recipient?: string;
+    isPrivate?: boolean;
   }>;
   chatMode?: 'global' | 'local'; // For chat mode updates
   region?: ChatRegion; // For region updates

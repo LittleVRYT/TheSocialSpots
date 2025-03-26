@@ -146,6 +146,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
           }
           
+          case MessageType.PRIVATE_MESSAGE: {
+            const client = clients.get(ws);
+            if (client && message.text && message.recipient) {
+              // Store the private message
+              const privateMessage = await storage.addMessage(
+                client.username,
+                message.text,
+                'user',
+                message.recipient,
+                true // Mark as private
+              );
+              
+              // Create message payload
+              const messagePayload = {
+                type: MessageType.PRIVATE_MESSAGE,
+                username: client.username,
+                text: message.text,
+                timestamp: privateMessage.timestamp.toISOString(),
+                recipient: message.recipient,
+                isPrivate: true
+              };
+              
+              // Send to recipient only
+              let recipientFound = false;
+              wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  const clientData = clients.get(client as WebSocket);
+                  if (clientData && clientData.username === message.recipient) {
+                    client.send(JSON.stringify(messagePayload));
+                    recipientFound = true;
+                  }
+                }
+              });
+              
+              // Send back to sender
+              ws.send(JSON.stringify(messagePayload));
+              
+              // If recipient not found, send a system message to sender
+              if (!recipientFound) {
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: `User ${message.recipient} is not online or doesn't exist.`,
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
           case MessageType.LEAVE: {
             handleDisconnect(ws);
             break;
@@ -332,6 +381,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(messages);
     } catch (error) {
       res.status(500).json({ message: 'Error fetching messages' });
+    }
+  });
+  
+  // API Route to get private messages between two users
+  app.get('/api/private-messages', async (req, res) => {
+    try {
+      const { username, recipient } = req.query;
+      
+      if (!username || !recipient) {
+        return res.status(400).json({ 
+          message: 'Both username and recipient are required query parameters' 
+        });
+      }
+      
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+      const messages = await storage.getPrivateMessages(
+        username as string, 
+        recipient as string, 
+        limit
+      );
+      
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ 
+        message: 'Error fetching private messages',
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 

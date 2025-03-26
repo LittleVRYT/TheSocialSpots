@@ -1,6 +1,6 @@
 import { users, chatUsers, chatMessages, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole } from "@shared/schema";
 import { v4 as uuidv4 } from 'uuid';
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or } from "drizzle-orm";
 import { db, pool } from './db';
 
 // modify the interface with any CRUD methods
@@ -16,8 +16,10 @@ export interface IStorage {
   removeChatUser(username: string): Promise<void>;
   getChatUsers(): Promise<ChatUser[]>;
   
-  addMessage(username: string, text: string, type: 'user' | 'system'): Promise<ChatMessage>;
+  // Message methods
+  addMessage(username: string, text: string, type: 'user' | 'system', recipient?: string, isPrivate?: boolean): Promise<ChatMessage>;
   getMessages(limit?: number): Promise<ChatMessage[]>;
+  getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]>;
   
   // Database initialization
   initialize(): Promise<void>;
@@ -49,7 +51,9 @@ export class PgStorage implements IStorage {
           username TEXT NOT NULL,
           text TEXT NOT NULL,
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          type TEXT NOT NULL
+          type TEXT NOT NULL,
+          recipient TEXT,
+          is_private BOOLEAN DEFAULT FALSE
         );
       `);
       console.log("Database initialized successfully");
@@ -198,7 +202,7 @@ export class PgStorage implements IStorage {
     }
   }
   
-  async addMessage(username: string, text: string, type: 'user' | 'system' = 'user'): Promise<ChatMessage> {
+  async addMessage(username: string, text: string, type: 'user' | 'system' = 'user', recipient?: string, isPrivate?: boolean): Promise<ChatMessage> {
     const messageId = uuidv4();
     const timestamp = new Date();
     
@@ -209,7 +213,9 @@ export class PgStorage implements IStorage {
           username,
           text,
           timestamp,
-          type
+          type,
+          recipient,
+          isPrivate: isPrivate || false
         })
         .returning();
       
@@ -218,7 +224,9 @@ export class PgStorage implements IStorage {
         username: message.username,
         text: message.text,
         timestamp: message.timestamp ? new Date(message.timestamp) : timestamp,
-        type: message.type as 'user' | 'system'
+        type: message.type as 'user' | 'system',
+        recipient: message.recipient || undefined,
+        isPrivate: message.isPrivate || false
       };
     } catch (error) {
       console.error("Error adding message:", error);
@@ -228,14 +236,18 @@ export class PgStorage implements IStorage {
         username,
         text,
         timestamp,
-        type
+        type,
+        recipient,
+        isPrivate: isPrivate || false
       };
     }
   }
   
   async getMessages(limit?: number): Promise<ChatMessage[]> {
     try {
-      const query = db.select().from(chatMessages).orderBy(chatMessages.timestamp);
+      const query = db.select().from(chatMessages)
+        .where(eq(chatMessages.isPrivate, false)) // Only get public messages
+        .orderBy(chatMessages.timestamp);
       
       const messages = limit 
         ? await query.limit(limit) 
@@ -246,10 +258,54 @@ export class PgStorage implements IStorage {
         username: msg.username,
         text: msg.text,
         timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-        type: msg.type as 'user' | 'system'
+        type: msg.type as 'user' | 'system',
+        recipient: msg.recipient || undefined,
+        isPrivate: msg.isPrivate || false
       }));
     } catch (error) {
       console.error("Error getting messages:", error);
+      return [];
+    }
+  }
+  
+  async getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]> {
+    try {
+      // Get messages where the user is either the sender or recipient of private messages
+      const query = db.select().from(chatMessages)
+        .where(
+          and(
+            eq(chatMessages.isPrivate, true),
+            and(
+              or(
+                and(
+                  eq(chatMessages.username, username),
+                  eq(chatMessages.recipient, recipient)
+                ),
+                and(
+                  eq(chatMessages.username, recipient),
+                  eq(chatMessages.recipient, username)
+                )
+              )
+            )
+          )
+        )
+        .orderBy(chatMessages.timestamp);
+      
+      const messages = limit 
+        ? await query.limit(limit) 
+        : await query;
+      
+      return messages.map(msg => ({
+        id: msg.id,
+        username: msg.username,
+        text: msg.text,
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        type: msg.type as 'user' | 'system',
+        recipient: msg.recipient || undefined,
+        isPrivate: true
+      }));
+    } catch (error) {
+      console.error("Error getting private messages:", error);
       return [];
     }
   }
@@ -329,24 +385,47 @@ export class MemStorage implements IStorage {
     return Array.from(this.chatUsers.values());
   }
   
-  async addMessage(username: string, text: string, type: 'user' | 'system' = 'user'): Promise<ChatMessage> {
+  async addMessage(username: string, text: string, type: 'user' | 'system' = 'user', recipient?: string, isPrivate?: boolean): Promise<ChatMessage> {
     const message: ChatMessage = {
       id: uuidv4(),
       username,
       text,
       timestamp: new Date(),
-      type
+      type,
+      recipient,
+      isPrivate: isPrivate || false
     };
     this.messages.push(message);
     return message;
   }
   
   async getMessages(limit?: number): Promise<ChatMessage[]> {
-    const allMessages = [...this.messages];
+    // Filter out private messages
+    const publicMessages = this.messages.filter(msg => !msg.isPrivate);
+    const sortedMessages = [...publicMessages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    
     if (limit) {
-      return allMessages.slice(-limit);
+      return sortedMessages.slice(-limit);
     }
-    return allMessages;
+    return sortedMessages;
+  }
+  
+  async getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]> {
+    // Get messages where the user is either the sender or recipient of private messages
+    const privateMessages = this.messages.filter(msg => 
+      msg.isPrivate && (
+        (msg.username === username && msg.recipient === recipient) || 
+        (msg.username === recipient && msg.recipient === username)
+      )
+    );
+    
+    // Sort by timestamp
+    const sortedMessages = [...privateMessages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    
+    if (limit) {
+      return sortedMessages.slice(-limit);
+    }
+    return sortedMessages;
   }
 }
 

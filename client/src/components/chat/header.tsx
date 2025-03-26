@@ -15,7 +15,7 @@ export function Header({ username, onlineCount, onLogout }: HeaderProps) {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <h1 className="text-xl font-bold text-primary">ChatRoom</h1>
+            <h1 className="text-xl font-bold text-primary">The Social Spot</h1>
             <Badge variant="outline" className="bg-green-500 text-white hover:bg-green-600">
               {onlineCount} online
             </Badge>
