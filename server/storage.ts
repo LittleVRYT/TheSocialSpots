@@ -21,11 +21,69 @@ export interface IStorage {
   getMessages(limit?: number): Promise<ChatMessage[]>;
   getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]>;
   
+  // Time tracking methods
+  updateUserLastActive(username: string): Promise<void>;
+  getUsersByTimeOnline(limit?: number): Promise<ChatUser[]>;
+  
   // Database initialization
   initialize(): Promise<void>;
 }
 
 export class PgStorage implements IStorage {
+  // Implement time tracking methods
+  async updateUserLastActive(username: string): Promise<void> {
+    try {
+      const now = new Date();
+      // Get the current user to calculate time online
+      const [currentUser] = await db.select()
+        .from(chatUsers)
+        .where(and(
+          eq(chatUsers.username, username),
+          eq(chatUsers.isActive, true)
+        ));
+        
+      if (currentUser) {
+        const lastActive = currentUser.lastActive ? new Date(currentUser.lastActive) : now;
+        const currentTotalTime = currentUser.totalTimeOnline || 0;
+        // Calculate additional time since last active (in seconds)
+        const additionalTime = Math.floor((now.getTime() - lastActive.getTime()) / 1000);
+        // Update the user's last active time and total time online
+        await db.update(chatUsers)
+          .set({ 
+            lastActive: now,
+            totalTimeOnline: currentTotalTime + additionalTime
+          })
+          .where(eq(chatUsers.username, username));
+      }
+    } catch (error) {
+      console.error("Error updating user's last active time:", error);
+    }
+  }
+  
+  async getUsersByTimeOnline(limit: number = 10): Promise<ChatUser[]> {
+    try {
+      const users = await db.select()
+        .from(chatUsers)
+        .orderBy(desc(chatUsers.totalTimeOnline))
+        .limit(limit);
+      
+      return users.map(user => ({
+        id: user.id,
+        username: user.username,
+        isActive: user.isActive || false,
+        role: user.role as UserRole,
+        avatarColor: user.avatarColor || undefined,
+        avatarShape: (user.avatarShape as 'circle' | 'square' | 'rounded') || undefined,
+        avatarInitials: user.avatarInitials || undefined,
+        joinTime: user.joinTime ? new Date(user.joinTime) : undefined,
+        lastActive: user.lastActive ? new Date(user.lastActive) : undefined,
+        totalTimeOnline: user.totalTimeOnline || 0
+      }));
+    } catch (error) {
+      console.error("Error getting users sorted by time online:", error);
+      return [];
+    }
+  }
   async initialize(): Promise<void> {
     try {
       // Create tables if they don't exist
@@ -426,6 +484,39 @@ export class MemStorage implements IStorage {
       return sortedMessages.slice(-limit);
     }
     return sortedMessages;
+  }
+  
+  async updateUserLastActive(username: string): Promise<void> {
+    const user = Array.from(this.chatUsers.values()).find(u => u.username === username && u.isActive);
+    if (user) {
+      const now = new Date();
+      
+      // Calculate time since last active
+      if (user.lastActive) {
+        const additionalTime = Math.floor((now.getTime() - user.lastActive.getTime()) / 1000);
+        user.totalTimeOnline = (user.totalTimeOnline || 0) + additionalTime;
+      }
+      
+      // Update last active time
+      user.lastActive = now;
+      
+      // Set join time if not set
+      if (!user.joinTime) {
+        user.joinTime = now;
+      }
+    }
+  }
+  
+  async getUsersByTimeOnline(limit: number = 10): Promise<ChatUser[]> {
+    const users = Array.from(this.chatUsers.values())
+      .filter(user => user.totalTimeOnline !== undefined)
+      .sort((a, b) => {
+        const aTime = a.totalTimeOnline || 0;
+        const bTime = b.totalTimeOnline || 0;
+        return bTime - aTime; // Sort in descending order
+      });
+    
+    return users.slice(0, limit);
   }
 }
 

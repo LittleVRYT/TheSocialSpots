@@ -76,6 +76,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Add user to storage
               await storage.addChatUser(message.username);
               
+              // Update user activity time
+              await storage.updateUserLastActive(message.username);
+              
               // Send join message to all clients
               const joinMessage = await storage.addMessage(
                 message.username, 
@@ -117,6 +120,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.CHAT: {
             const client = clients.get(ws);
             if (client && message.text) {
+              // Update user's last active time
+              await storage.updateUserLastActive(client.username);
+              
               // Store the message
               const chatMessage = await storage.addMessage(
                 client.username,
@@ -149,6 +155,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.PRIVATE_MESSAGE: {
             const client = clients.get(ws);
             if (client && message.text && message.recipient) {
+              // Update user's last active time
+              await storage.updateUserLastActive(client.username);
+              
               // Store the private message
               const privateMessage = await storage.addMessage(
                 client.username,
@@ -406,6 +415,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         message: 'Error fetching private messages',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // API Route to get the leaderboard (users sorted by time online)
+  app.get('/api/leaderboard', async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const leaderboard = await storage.getUsersByTimeOnline(limit);
+      res.json(leaderboard);
+    } catch (error) {
+      res.status(500).json({ 
+        message: 'Error fetching leaderboard',
         details: error instanceof Error ? error.message : String(error)
       });
     }

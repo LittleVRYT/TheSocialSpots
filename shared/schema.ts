@@ -17,6 +17,9 @@ export const chatUsers = pgTable("chat_users", {
   avatarColor: text("avatar_color").default('#6366f1'), // Default to indigo
   avatarShape: text("avatar_shape").default('circle'), // circle, square, rounded
   avatarInitials: text("avatar_initials"), // For custom initials (otherwise use first letter of username)
+  joinTime: timestamp("join_time").defaultNow(), // When the user first joined
+  lastActive: timestamp("last_active").defaultNow(), // Last activity timestamp
+  totalTimeOnline: integer("total_time_online").default(0), // Total time in seconds
 });
 
 export const chatMessages = pgTable("chat_messages", {
@@ -64,6 +67,9 @@ export type ChatUser = {
   avatarColor?: string;
   avatarShape?: 'circle' | 'square' | 'rounded';
   avatarInitials?: string;
+  joinTime?: Date;
+  lastActive?: Date;
+  totalTimeOnline?: number; // Total time in seconds
 };
 
 export type ChatMessage = {

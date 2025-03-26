@@ -4,15 +4,17 @@ import { Header } from "./header";
 import { MessageList } from "./message-list";
 import { MessageInput } from "./message-input";
 import { OnlineUsers } from "./online-users";
+import { Leaderboard } from "./leaderboard";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Wifi, MessageSquare, Users } from "lucide-react";
+import { Globe, Wifi, Trophy } from "lucide-react";
 import { ChatRegion, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ChatContainer() {
   const [username, setUsername] = useState<string | null>(null);
   const [isUsersVisible, setIsUsersVisible] = useState(false);
+  const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const { toast } = useToast();
   
   const { 
@@ -44,6 +46,17 @@ export function ChatContainer() {
   // Toggle users sidebar on mobile
   const toggleUsersSidebar = () => {
     setIsUsersVisible(!isUsersVisible);
+    if (isLeaderboardVisible) {
+      setIsLeaderboardVisible(false);
+    }
+  };
+  
+  // Toggle leaderboard visibility
+  const toggleLeaderboard = () => {
+    setIsLeaderboardVisible(!isLeaderboardVisible);
+    if (isUsersVisible) {
+      setIsUsersVisible(false);
+    }
   };
   
   // Handle connection errors
@@ -119,6 +132,19 @@ export function ChatContainer() {
               <option value={ChatRegion.OCEANIA}>🇦🇺 Oceania</option>
             </select>
           </div>
+          
+          {/* Leaderboard Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleLeaderboard}
+              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
+                isLeaderboardVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
+              }`}
+            >
+              <Trophy className="h-4 w-4" />
+              <span className="text-xs font-medium">Leaderboard</span>
+            </button>
+          </div>
         </div>
       </div>
       
@@ -143,6 +169,27 @@ export function ChatContainer() {
           visible={isUsersVisible}
           onToggleVisibility={toggleUsersSidebar}
         />
+        
+        {/* Leaderboard Sidebar */}
+        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
+          isLeaderboardVisible ? 'block' : 'hidden'
+        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
+          <div className="p-4 h-full">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Leaderboard</h2>
+              <button 
+                onClick={toggleLeaderboard}
+                className="p-1 rounded-md text-gray-500 hover:bg-gray-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <Leaderboard visible={isLeaderboardVisible} />
+          </div>
+        </div>
       </main>
     </div>
   );
