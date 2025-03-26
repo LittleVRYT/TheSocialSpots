@@ -234,7 +234,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const messageStr = JSON.stringify(message);
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(messageStr);
+        const clientData = clients.get(client as WebSocket);
+        
+        if (clientData) {
+          // If it's a chat message, only send to global users
+          if (message.type === MessageType.CHAT && clientData.chatMode === 'local') {
+            // Don't send messages to local users unless it's through the region-specific broadcast
+            return;
+          }
+          
+          // For any other type of message (users lists, join/leave notifications, etc.)
+          // or for global users, always send the message
+          client.send(messageStr);
+        }
       }
     });
   }
@@ -245,9 +257,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         const clientData = clients.get(client as WebSocket);
-        // Send to clients in this region or global users
-        if (clientData && (clientData.region === region || clientData.region === ChatRegion.GLOBAL)) {
-          client.send(messageStr);
+        
+        if (clientData) {
+          // Determine whether this client should receive the message
+          // 1. If client is in same region as sender, they receive the message
+          // 2. If client is in global mode, they won't receive local-only messages unless in same region
+          const inSameRegion = clientData.region === region;
+          
+          if (inSameRegion) {
+            // Always deliver messages to clients in the same region
+            client.send(messageStr);
+          }
         }
       }
     });

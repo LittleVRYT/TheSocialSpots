@@ -1,6 +1,6 @@
 import { users, chatUsers, chatMessages, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole } from "@shared/schema";
 import { v4 as uuidv4 } from 'uuid';
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { db, pool } from './db';
 
 // modify the interface with any CRUD methods
@@ -93,21 +93,19 @@ export class PgStorage implements IStorage {
       // Check if user already exists and is active
       const existingActiveUsers = await db.select()
         .from(chatUsers)
-        .where(eq(chatUsers.username, username))
-        .where(eq(chatUsers.isActive, true));
+        .where(eq(chatUsers.username, username));
       
-      if (existingActiveUsers.length > 0) {
+      const activeUser = existingActiveUsers.find(user => user.isActive === true);
+      
+      if (activeUser) {
         throw new Error('Username already taken');
       }
       
       // Check if the user exists but is inactive
-      const existingInactiveUsers = await db.select()
-        .from(chatUsers)
-        .where(eq(chatUsers.username, username))
-        .where(eq(chatUsers.isActive, false));
+      const inactiveUser = existingActiveUsers.find(user => user.isActive === false);
       
       // If the user exists but is inactive, reactivate them
-      if (existingInactiveUsers.length > 0) {
+      if (inactiveUser) {
         const [reactivatedUser] = await db.update(chatUsers)
           .set({ isActive: true })
           .where(eq(chatUsers.username, username))
