@@ -1,8 +1,9 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
 import { MessageType, type WSMessage } from "@shared/schema";
+import OpenAI from "openai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
@@ -187,6 +188,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(messages);
     } catch (error) {
       res.status(500).json({ message: 'Error fetching messages' });
+    }
+  });
+
+  // Initialize OpenAI client
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  // AI Homework Helper endpoint
+  app.post('/api/ai-homework-help', async (req: Request, res: Response) => {
+    try {
+      const { prompt } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ error: 'Prompt is required' });
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful academic assistant. Provide clear, informative responses to homework questions. Break down complex problems step by step. Explain concepts thoroughly. Do not just give direct answers to problems."
+          },
+          { 
+            role: "user", 
+            content: prompt 
+          }
+        ],
+        max_tokens: 800,
+        temperature: 0.7,
+      });
+
+      const response = completion.choices[0].message.content;
+      
+      res.json({ response });
+    } catch (error) {
+      console.error('AI Homework Helper Error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get AI response', 
+        details: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 
