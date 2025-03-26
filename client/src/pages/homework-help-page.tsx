@@ -65,7 +65,7 @@ export default function HomeworkHelpPage() {
         <CardHeader>
           <CardTitle className="text-2xl">AI Homework Help</CardTitle>
           <CardDescription>
-            Ask questions about your schoolwork and get AI-powered assistance.
+            Ask questions about your schoolwork and get AI-powered assistance. The AI can help with math, science, history, literature, and more.
           </CardDescription>
         </CardHeader>
         
@@ -111,8 +111,9 @@ export default function HomeworkHelpPage() {
           )}
         </CardContent>
         
-        <CardFooter className="flex flex-col items-start text-sm text-muted-foreground">
+        <CardFooter className="flex flex-col items-start text-sm space-y-1 text-muted-foreground">
           <p>Note: AI is here to help with understanding concepts, not to provide direct answers for assignments.</p>
+          <p>If the AI service is unavailable, you'll still receive general guidance on your topic.</p>
         </CardFooter>
       </Card>
     </div>

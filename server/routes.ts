@@ -205,23 +205,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Prompt is required' });
       }
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful academic assistant. Provide clear, informative responses to homework questions. Break down complex problems step by step. Explain concepts thoroughly. Do not just give direct answers to problems."
-          },
-          { 
-            role: "user", 
-            content: prompt 
-          }
-        ],
-        max_tokens: 800,
-        temperature: 0.7,
-      });
+      let response: string;
 
-      const response = completion.choices[0].message.content;
+      try {
+        // Try to use the OpenAI API
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful academic assistant. Provide clear, informative responses to homework questions. Break down complex problems step by step. Explain concepts thoroughly. Do not just give direct answers to problems."
+            },
+            { 
+              role: "user", 
+              content: prompt 
+            }
+          ],
+          max_tokens: 800,
+          temperature: 0.7,
+        });
+
+        response = completion.choices[0].message.content || '';
+      } catch (apiError) {
+        console.log('OpenAI API Error:', apiError);
+        
+        // Fallback to local solution if API call fails
+        const lowercasePrompt = prompt.toLowerCase();
+        
+        // Detect some basic academic topics
+        if (lowercasePrompt.includes('math') || 
+            lowercasePrompt.includes('equation') || 
+            lowercasePrompt.includes('solve') ||
+            lowercasePrompt.includes('calculate')) {
+          response = `I'd be happy to help with your math question. To solve math problems effectively:
+
+1. Break down the problem into smaller steps
+2. Identify what formulas or concepts apply
+3. Work through each step carefully
+4. Check your answer by plugging it back into the original problem
+
+Without being able to connect to the AI service at the moment, I can't solve your specific problem, but these general steps should help. Try using online resources like Khan Academy or Wolfram Alpha for specific equations.`;
+        } else if (lowercasePrompt.includes('history') || 
+                   lowercasePrompt.includes('when') || 
+                   lowercasePrompt.includes('war') || 
+                   lowercasePrompt.includes('century')) {
+          response = `For history questions, I recommend:
+
+1. Identify the key events, people, and time periods
+2. Look for cause and effect relationships
+3. Consider multiple perspectives on historical events
+4. Use reliable sources like textbooks, educational websites, and peer-reviewed articles
+
+I'd normally provide a specific answer about your history question, but our AI service is currently unavailable. Try resources like Khan Academy, Crash Course History videos, or your textbook for reliable information.`;
+        } else if (lowercasePrompt.includes('science') || 
+                   lowercasePrompt.includes('biology') || 
+                   lowercasePrompt.includes('physics') || 
+                   lowercasePrompt.includes('chemistry')) {
+          response = `For science questions, try this approach:
+
+1. Understand the core scientific concepts involved
+2. Look for relevant formulas or processes
+3. Apply the scientific method to analyze the problem
+4. Draw conclusions based on evidence
+
+I can't provide a detailed answer to your specific science question right now due to service limitations, but websites like Khan Academy, National Geographic, and NASA's educational resources offer excellent scientific explanations.`;
+        } else if (lowercasePrompt.includes('english') || 
+                   lowercasePrompt.includes('essay') || 
+                   lowercasePrompt.includes('write') || 
+                   lowercasePrompt.includes('book') ||
+                   lowercasePrompt.includes('literature')) {
+          response = `When tackling English literature or writing assignments:
+
+1. For essays: Start with a clear thesis statement
+2. Organize your thoughts with an outline
+3. Use evidence from texts to support your points
+4. Revise for clarity, coherence, and grammar
+
+For literature analysis:
+1. Consider themes, characters, setting, and symbolism
+2. Look at the historical context of the work
+3. Analyze the author's purpose and techniques
+
+Unfortunately, I can't provide a specific analysis of your question at the moment, but resources like Purdue OWL Writing Lab or SparkNotes can help with writing and literature.`;
+        } else {
+          response = `Thank you for your academic question. I'd normally provide a detailed answer, but our AI service is currently unavailable.
+
+While I can't answer your specific question right now, here are some general study tips:
+
+1. Break complex topics into smaller, manageable parts
+2. Use multiple resources (textbooks, videos, online guides)
+3. Teach concepts to others to strengthen your understanding
+4. Practice with example problems or questions
+5. Connect new information to things you already know
+
+Try resources like Khan Academy, Coursera, or educational YouTube channels for your topic. If you try again later, I might be able to provide a more specific response.`;
+        }
+      }
       
       res.json({ response });
     } catch (error) {
