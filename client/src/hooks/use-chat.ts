@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChatUser, ChatMessage, MessageType, WSMessage } from '@shared/schema';
+import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion } from '@shared/schema';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -8,9 +8,13 @@ interface UseChatResult {
   messages: ChatMessage[];
   connectionStatus: ConnectionStatus;
   error: string | null;
+  chatMode: 'local' | 'global';
+  region: ChatRegion;
   connect: (username: string) => void;
   disconnect: () => void;
   sendMessage: (text: string) => void;
+  setChatMode: (mode: 'local' | 'global') => void;
+  setRegion: (region: ChatRegion) => void;
 }
 
 export function useChat(): UseChatResult {
@@ -18,6 +22,8 @@ export function useChat(): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
+  const [chatMode, setChatModeState] = useState<'local' | 'global'>('global');
+  const [region, setRegionState] = useState<ChatRegion>(ChatRegion.GLOBAL);
   
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef<string | null>(null);
@@ -103,6 +109,36 @@ export function useChat(): UseChatResult {
           case MessageType.ERROR:
             setError(data.text || 'Unknown error');
             break;
+            
+          case MessageType.UPDATE_CHAT_MODE:
+            if (data.chatMode) {
+              setChatModeState(data.chatMode);
+              
+              // Add a system message about mode change
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `Chat mode changed to ${data.chatMode}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+            }
+            break;
+            
+          case MessageType.UPDATE_REGION:
+            if (data.region) {
+              setRegionState(data.region);
+              
+              // Add a system message about region change
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `Region changed to ${data.region}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+            }
+            break;
         }
       });
       
@@ -169,13 +205,39 @@ export function useChat(): UseChatResult {
     setMessages([]);
   }, []);
   
+  // Set chat mode and send update to server
+  const setChatMode = useCallback((mode: 'local' | 'global') => {
+    if (mode !== chatMode && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.UPDATE_CHAT_MODE,
+        chatMode: mode
+      }));
+      setChatModeState(mode);
+    }
+  }, [chatMode]);
+  
+  // Set region and send update to server
+  const setRegion = useCallback((newRegion: ChatRegion) => {
+    if (newRegion !== region && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.UPDATE_REGION,
+        region: newRegion
+      }));
+      setRegionState(newRegion);
+    }
+  }, [region]);
+
   return {
     users,
     messages,
     connectionStatus,
     error,
+    chatMode,
+    region,
     connect,
     disconnect,
-    sendMessage
+    sendMessage,
+    setChatMode,
+    setRegion
   };
 }

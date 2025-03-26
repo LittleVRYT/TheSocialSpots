@@ -2,8 +2,22 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
-import { MessageType, type WSMessage } from "@shared/schema";
+import { MessageType, type WSMessage, ChatRegion } from "@shared/schema";
 import OpenAI from "openai";
+
+// Helper function to get a readable region name
+function getRegionDisplayName(region: ChatRegion): string {
+  switch (region) {
+    case ChatRegion.NORTH_AMERICA: return 'North America';
+    case ChatRegion.EUROPE: return 'Europe';
+    case ChatRegion.ASIA: return 'Asia';
+    case ChatRegion.SOUTH_AMERICA: return 'South America';
+    case ChatRegion.AFRICA: return 'Africa';
+    case ChatRegion.OCEANIA: return 'Oceania';
+    case ChatRegion.GLOBAL:
+    default: return 'Global';
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
@@ -13,7 +27,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   
   // Track connected clients
-  const clients = new Map<WebSocket, { username: string }>();
+  const clients = new Map<WebSocket, { 
+    username: string;
+    chatMode: 'local' | 'global';
+    region: ChatRegion;
+  }>();
   
   // WebSocket server connection handler
   wss.on('connection', (ws: WebSocket) => {
@@ -42,8 +60,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 return;
               }
               
-              // Store client info
-              clients.set(ws, { username: message.username });
+              // Store client info with default settings
+              clients.set(ws, { 
+                username: message.username,
+                chatMode: 'global', // Default to global
+                region: ChatRegion.GLOBAL // Default to global region
+              });
               
               // Add user to storage
               await storage.addChatUser(message.username);
@@ -96,19 +118,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 'user'
               );
               
-              // Broadcast to all clients
-              broadcastToAll({
-                type: MessageType.CHAT,
-                username: client.username,
-                text: message.text,
-                timestamp: chatMessage.timestamp.toISOString()
-              });
+              // Determine how to broadcast based on chat mode
+              if (client.chatMode === 'global') {
+                // In global mode, broadcast to all clients
+                broadcastToAll({
+                  type: MessageType.CHAT,
+                  username: client.username,
+                  text: message.text,
+                  timestamp: chatMessage.timestamp.toISOString()
+                });
+              } else {
+                // In local mode, only broadcast to the same region
+                broadcastToRegion({
+                  type: MessageType.CHAT,
+                  username: client.username,
+                  text: message.text,
+                  timestamp: chatMessage.timestamp.toISOString()
+                }, client.region);
+              }
             }
             break;
           }
           
           case MessageType.LEAVE: {
             handleDisconnect(ws);
+            break;
+          }
+          
+          // Handle chat mode update
+          case MessageType.UPDATE_CHAT_MODE: {
+            const client = clients.get(ws);
+            if (client && message.chatMode && (message.chatMode === 'local' || message.chatMode === 'global')) {
+              // Update client's chat mode
+              client.chatMode = message.chatMode;
+              
+              // Send confirmation to the client
+              ws.send(JSON.stringify({
+                type: MessageType.CHAT,
+                username: 'System',
+                text: `Your chat mode has been updated to ${message.chatMode === 'global' ? 'Global' : 'Local'}`,
+                timestamp: new Date().toISOString()
+              }));
+            }
+            break;
+          }
+          
+          // Handle region update
+          case MessageType.UPDATE_REGION: {
+            const client = clients.get(ws);
+            if (client && message.region && Object.values(ChatRegion).includes(message.region as ChatRegion)) {
+              // Update client's region
+              client.region = message.region as ChatRegion;
+              
+              // Send confirmation to the client
+              ws.send(JSON.stringify({
+                type: MessageType.CHAT,
+                username: 'System',
+                text: `Your region has been updated to ${getRegionDisplayName(message.region as ChatRegion)}`,
+                timestamp: new Date().toISOString()
+              }));
+            }
             break;
           }
         }
@@ -166,6 +235,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(messageStr);
+      }
+    });
+  }
+  
+  // Function to broadcast a message only to clients in a specific region
+  function broadcastToRegion(message: WSMessage, region: ChatRegion) {
+    const messageStr = JSON.stringify(message);
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        const clientData = clients.get(client as WebSocket);
+        // Send to clients in this region or global users
+        if (clientData && (clientData.region === region || clientData.region === ChatRegion.GLOBAL)) {
+          client.send(messageStr);
+        }
       }
     });
   }

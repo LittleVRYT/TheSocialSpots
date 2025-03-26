@@ -39,11 +39,23 @@ export enum UserRole {
   MODERATOR = 'moderator'
 }
 
+export enum ChatRegion {
+  GLOBAL = 'global',
+  NORTH_AMERICA = 'north_america',
+  EUROPE = 'europe',
+  ASIA = 'asia',
+  SOUTH_AMERICA = 'south_america',
+  AFRICA = 'africa',
+  OCEANIA = 'oceania'
+}
+
 export type ChatUser = {
   id: string;
   username: string;
   isActive: boolean;
   role?: UserRole;
+  chatMode?: 'local' | 'global';
+  region?: ChatRegion;
 };
 
 export type ChatMessage = {
@@ -61,11 +73,13 @@ export enum MessageType {
   CHAT = 'chat',
   USERS = 'users',
   HISTORY = 'history',
-  ERROR = 'error'
+  ERROR = 'error',
+  UPDATE_CHAT_MODE = 'update_chat_mode',
+  UPDATE_REGION = 'update_region'
 }
 
 export type WSMessage = {
-  type: MessageType;
+  type: MessageType | string; // Allow string for custom message types
   username?: string;
   text?: string;
   timestamp?: string;
@@ -76,4 +90,6 @@ export type WSMessage = {
     text: string;
     timestamp: string;
   }>;
+  chatMode?: 'global' | 'local'; // For chat mode updates
+  region?: ChatRegion; // For region updates
 };
