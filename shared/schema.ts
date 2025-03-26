@@ -17,10 +17,17 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 // Chat specific schemas and types
+export enum UserRole {
+  USER = 'user',
+  OWNER = 'owner',
+  MODERATOR = 'moderator'
+}
+
 export type ChatUser = {
   id: string;
   username: string;
   isActive: boolean;
+  role?: UserRole;
 };
 
 export type ChatMessage = {
