@@ -91,16 +91,37 @@ export class PgStorage implements IStorage {
     
     try {
       // Check if user already exists and is active
-      const existingUsers = await db.select()
+      const existingActiveUsers = await db.select()
         .from(chatUsers)
         .where(eq(chatUsers.username, username))
         .where(eq(chatUsers.isActive, true));
       
-      if (existingUsers.length > 0) {
+      if (existingActiveUsers.length > 0) {
         throw new Error('Username already taken');
       }
       
-      // Create a unique user ID
+      // Check if the user exists but is inactive
+      const existingInactiveUsers = await db.select()
+        .from(chatUsers)
+        .where(eq(chatUsers.username, username))
+        .where(eq(chatUsers.isActive, false));
+      
+      // If the user exists but is inactive, reactivate them
+      if (existingInactiveUsers.length > 0) {
+        const [reactivatedUser] = await db.update(chatUsers)
+          .set({ isActive: true })
+          .where(eq(chatUsers.username, username))
+          .returning();
+        
+        return {
+          id: reactivatedUser.id,
+          username: reactivatedUser.username,
+          isActive: true, // Force to true since we're reactivating
+          role: reactivatedUser.role as UserRole
+        };
+      }
+      
+      // Create a unique user ID for new users
       const userId = uuidv4();
       
       // Insert the new user
@@ -116,7 +137,7 @@ export class PgStorage implements IStorage {
       return {
         id: newUser.id,
         username: newUser.username,
-        isActive: newUser.isActive,
+        isActive: true, // Force to true to avoid null issues
         role: newUser.role as UserRole
       };
     } catch (error) {
@@ -152,7 +173,7 @@ export class PgStorage implements IStorage {
       return users.map(user => ({
         id: user.id,
         username: user.username,
-        isActive: user.isActive,
+        isActive: true, // Force to true since we're already filtering for active users
         role: user.role as UserRole
       }));
     } catch (error) {
@@ -180,7 +201,7 @@ export class PgStorage implements IStorage {
         id: message.id,
         username: message.username,
         text: message.text,
-        timestamp: new Date(message.timestamp),
+        timestamp: message.timestamp ? new Date(message.timestamp) : timestamp,
         type: message.type as 'user' | 'system'
       };
     } catch (error) {
@@ -198,19 +219,17 @@ export class PgStorage implements IStorage {
   
   async getMessages(limit?: number): Promise<ChatMessage[]> {
     try {
-      let query = db.select().from(chatMessages).orderBy(chatMessages.timestamp);
+      const query = db.select().from(chatMessages).orderBy(chatMessages.timestamp);
       
-      if (limit) {
-        query = query.limit(limit);
-      }
-      
-      const messages = await query;
+      const messages = limit 
+        ? await query.limit(limit) 
+        : await query;
       
       return messages.map(msg => ({
         id: msg.id,
         username: msg.username,
         text: msg.text,
-        timestamp: new Date(msg.timestamp),
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
         type: msg.type as 'user' | 'system'
       }));
     } catch (error) {

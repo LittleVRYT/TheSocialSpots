@@ -6,8 +6,6 @@ import { MessageInput } from "./message-input";
 import { OnlineUsers } from "./online-users";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
-import { Toggle } from "@/components/ui/toggle";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, Wifi } from "lucide-react";
 import { ChatRegion } from "@shared/schema";
 
@@ -81,48 +79,44 @@ export function ChatContainer() {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Chat Mode:</span>
             <div className="flex items-center border rounded-md bg-white">
-              <Toggle 
-                pressed={chatMode === 'local'} 
-                onPressedChange={() => setChatMode('local')}
-                className={`gap-1 p-2 ${chatMode === 'local' ? 'bg-primary/10 text-primary' : ''}`}
+              <button 
+                type="button"
+                onClick={() => setChatMode('local')}
+                className={`flex items-center gap-1 p-2 rounded-l-md ${chatMode === 'local' ? 'bg-primary/10 text-primary' : ''}`}
                 aria-label="Local chat"
               >
                 <Wifi className="h-4 w-4" />
                 <span className="text-xs">Local</span>
-              </Toggle>
-              <Toggle 
-                pressed={chatMode === 'global'} 
-                onPressedChange={() => setChatMode('global')}
-                className={`gap-1 p-2 ${chatMode === 'global' ? 'bg-primary/10 text-primary' : ''}`}
+              </button>
+              <button 
+                type="button"
+                onClick={() => setChatMode('global')}
+                className={`flex items-center gap-1 p-2 rounded-r-md ${chatMode === 'global' ? 'bg-primary/10 text-primary' : ''}`}
                 aria-label="Global chat"
               >
                 <Globe className="h-4 w-4" />
                 <span className="text-xs">Global</span>
-              </Toggle>
+              </button>
             </div>
           </div>
           
           {/* Region Selection */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Region:</span>
-            <Select 
-              value={region} 
-              onValueChange={(val) => setRegion(val as ChatRegion)}
+            <select 
+              value={region}
+              onChange={(e) => setRegion(e.target.value as ChatRegion)}
               disabled={chatMode === 'local'}
+              className="w-36 h-9 rounded-md border border-input px-3 py-1 text-sm shadow-sm"
             >
-              <SelectTrigger className="w-36 h-9">
-                <SelectValue placeholder="Select Region" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ChatRegion.GLOBAL}>🌎 Global</SelectItem>
-                <SelectItem value={ChatRegion.NORTH_AMERICA}>🇺🇸 North America</SelectItem>
-                <SelectItem value={ChatRegion.EUROPE}>🇪🇺 Europe</SelectItem>
-                <SelectItem value={ChatRegion.ASIA}>🇯🇵 Asia</SelectItem>
-                <SelectItem value={ChatRegion.SOUTH_AMERICA}>🇧🇷 South America</SelectItem>
-                <SelectItem value={ChatRegion.AFRICA}>🇿🇦 Africa</SelectItem>
-                <SelectItem value={ChatRegion.OCEANIA}>🇦🇺 Oceania</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value={ChatRegion.GLOBAL}>🌎 Global</option>
+              <option value={ChatRegion.NORTH_AMERICA}>🇺🇸 North America</option>
+              <option value={ChatRegion.EUROPE}>🇪🇺 Europe</option>
+              <option value={ChatRegion.ASIA}>🇯🇵 Asia</option>
+              <option value={ChatRegion.SOUTH_AMERICA}>🇧🇷 South America</option>
+              <option value={ChatRegion.AFRICA}>🇿🇦 Africa</option>
+              <option value={ChatRegion.OCEANIA}>🇦🇺 Oceania</option>
+            </select>
           </div>
         </div>
       </div>
