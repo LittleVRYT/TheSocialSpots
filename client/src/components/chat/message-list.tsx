@@ -1,10 +1,17 @@
 import { useRef, useEffect } from "react";
 import { format } from "date-fns";
 import { ChatMessage } from "@shared/schema";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface MessageListProps {
   messages: ChatMessage[];
   currentUsername: string;
+  users?: { 
+    username: string; 
+    avatarColor?: string; 
+    avatarShape?: 'circle' | 'square' | 'rounded'; 
+    avatarInitials?: string; 
+  }[];
 }
 
 export function MessageList({ messages, currentUsername }: MessageListProps) {

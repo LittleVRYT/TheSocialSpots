@@ -14,6 +14,9 @@ export const chatUsers = pgTable("chat_users", {
   username: text("username").notNull().unique(),
   isActive: boolean("is_active").default(true),
   role: text("role").default('user'),
+  avatarColor: text("avatar_color").default('#6366f1'), // Default to indigo
+  avatarShape: text("avatar_shape").default('circle'), // circle, square, rounded
+  avatarInitials: text("avatar_initials"), // For custom initials (otherwise use first letter of username)
 });
 
 export const chatMessages = pgTable("chat_messages", {
@@ -56,6 +59,9 @@ export type ChatUser = {
   role?: UserRole;
   chatMode?: 'local' | 'global';
   region?: ChatRegion;
+  avatarColor?: string;
+  avatarShape?: 'circle' | 'square' | 'rounded';
+  avatarInitials?: string;
 };
 
 export type ChatMessage = {
@@ -75,7 +81,8 @@ export enum MessageType {
   HISTORY = 'history',
   ERROR = 'error',
   UPDATE_CHAT_MODE = 'update_chat_mode',
-  UPDATE_REGION = 'update_region'
+  UPDATE_REGION = 'update_region',
+  UPDATE_AVATAR = 'update_avatar'
 }
 
 export type WSMessage = {
@@ -92,4 +99,7 @@ export type WSMessage = {
   }>;
   chatMode?: 'global' | 'local'; // For chat mode updates
   region?: ChatRegion; // For region updates
+  avatarColor?: string; // For avatar color updates
+  avatarShape?: 'circle' | 'square' | 'rounded'; // For avatar shape updates
+  avatarInitials?: string; // For avatar initials updates
 };

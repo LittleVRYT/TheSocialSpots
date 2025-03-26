@@ -38,7 +38,10 @@ export class PgStorage implements IStorage {
           id TEXT PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
           is_active BOOLEAN DEFAULT TRUE,
-          role TEXT DEFAULT 'user'
+          role TEXT DEFAULT 'user',
+          avatar_color TEXT DEFAULT '#6366f1',
+          avatar_shape TEXT DEFAULT 'circle',
+          avatar_initials TEXT
         );
         
         CREATE TABLE IF NOT EXISTS chat_messages (
@@ -115,12 +118,18 @@ export class PgStorage implements IStorage {
           id: reactivatedUser.id,
           username: reactivatedUser.username,
           isActive: true, // Force to true since we're reactivating
-          role: reactivatedUser.role as UserRole
+          role: reactivatedUser.role as UserRole,
+          avatarColor: reactivatedUser.avatarColor || undefined,
+          avatarShape: (reactivatedUser.avatarShape as 'circle' | 'square' | 'rounded') || undefined,
+          avatarInitials: reactivatedUser.avatarInitials || undefined
         };
       }
       
       // Create a unique user ID for new users
       const userId = uuidv4();
+      
+      // Generate avatar initials (default to first letter of username)
+      const avatarInitials = username.charAt(0).toUpperCase();
       
       // Insert the new user
       const [newUser] = await db.insert(chatUsers)
@@ -128,7 +137,10 @@ export class PgStorage implements IStorage {
           id: userId,
           username,
           isActive: true,
-          role
+          role,
+          avatarColor: '#6366f1', // Default indigo color
+          avatarShape: 'circle',  // Default circle shape
+          avatarInitials
         })
         .returning();
       
@@ -136,7 +148,10 @@ export class PgStorage implements IStorage {
         id: newUser.id,
         username: newUser.username,
         isActive: true, // Force to true to avoid null issues
-        role: newUser.role as UserRole
+        role: newUser.role as UserRole,
+        avatarColor: newUser.avatarColor || undefined,
+        avatarShape: (newUser.avatarShape as 'circle' | 'square' | 'rounded') || undefined,
+        avatarInitials: newUser.avatarInitials || undefined
       };
     } catch (error) {
       console.error("Error adding chat user:", error);
@@ -172,7 +187,10 @@ export class PgStorage implements IStorage {
         id: user.id,
         username: user.username,
         isActive: true, // Force to true since we're already filtering for active users
-        role: user.role as UserRole
+        role: user.role as UserRole,
+        avatarColor: user.avatarColor || undefined,
+        avatarShape: (user.avatarShape as 'circle' | 'square' | 'rounded') || undefined,
+        avatarInitials: user.avatarInitials || undefined
       }));
     } catch (error) {
       console.error("Error getting chat users:", error);
@@ -287,11 +305,17 @@ export class MemStorage implements IStorage {
     // Assign owner role if username is "Charles F"
     const role = username === "Charles F" ? UserRole.OWNER : UserRole.USER;
     
+    // Generate initials (using first letter of username)
+    const avatarInitials = username.charAt(0).toUpperCase();
+    
     const newUser: ChatUser = {
       id,
       username,
       isActive: true,
-      role
+      role,
+      avatarColor: '#6366f1',
+      avatarShape: 'circle',
+      avatarInitials
     };
     this.chatUsers.set(username, newUser);
     return newUser;

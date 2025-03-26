@@ -31,6 +31,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     username: string;
     chatMode: 'local' | 'global';
     region: ChatRegion;
+    avatarColor?: string;
+    avatarShape?: 'circle' | 'square' | 'rounded';
+    avatarInitials?: string;
   }>();
   
   // WebSocket server connection handler
@@ -64,7 +67,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               clients.set(ws, { 
                 username: message.username,
                 chatMode: 'global', // Default to global
-                region: ChatRegion.GLOBAL // Default to global region
+                region: ChatRegion.GLOBAL, // Default to global region
+                avatarColor: '#6366f1', // Default indigo color
+                avatarShape: 'circle', // Default circle shape
+                avatarInitials: message.username.charAt(0).toUpperCase() // First letter of username
               });
               
               // Add user to storage
@@ -177,6 +183,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 text: `Your region has been updated to ${getRegionDisplayName(message.region as ChatRegion)}`,
                 timestamp: new Date().toISOString()
               }));
+            }
+            break;
+          }
+          
+          // Handle avatar update
+          case MessageType.UPDATE_AVATAR: {
+            const client = clients.get(ws);
+            if (client) {
+              // Update client's avatar properties if provided
+              if (message.avatarColor) {
+                client.avatarColor = message.avatarColor;
+              }
+              
+              if (message.avatarShape && ['circle', 'square', 'rounded'].includes(message.avatarShape)) {
+                client.avatarShape = message.avatarShape as 'circle' | 'square' | 'rounded';
+              }
+              
+              if (message.avatarInitials) {
+                client.avatarInitials = message.avatarInitials.substring(0, 2); // Limit to 2 characters
+              }
+              
+              // Send confirmation to the client
+              ws.send(JSON.stringify({
+                type: MessageType.CHAT,
+                username: 'System',
+                text: 'Your avatar has been updated',
+                timestamp: new Date().toISOString()
+              }));
+              
+              // Broadcast updated user list to all clients
+              const updatedUsers = await storage.getChatUsers();
+              broadcastToAll({
+                type: MessageType.USERS,
+                users: updatedUsers
+              });
             }
             break;
           }

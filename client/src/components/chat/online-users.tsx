@@ -32,8 +32,16 @@ export function OnlineUsers({ users, currentUsername, visible, onToggleVisibilit
         <div className="divide-y divide-gray-100">
           {sortedUsers.map(user => (
             <div key={user.id} className="flex items-center p-3 hover:bg-gray-50">
-              <div className="w-2 h-2 bg-success rounded-full mr-3"></div>
-              <span className="text-gray-800 font-medium">{user.username}</span>
+              <div className="w-2 h-2 bg-success rounded-full mr-2"></div>
+              <UserAvatar 
+                username={user.username} 
+                isCurrentUser={user.username === currentUsername}
+                avatarColor={user.avatarColor}
+                avatarShape={user.avatarShape}
+                avatarInitials={user.avatarInitials}
+                size="sm"
+              />
+              <span className="text-gray-800 font-medium ml-2">{user.username}</span>
               {user.username === currentUsername && (
                 <span className="ml-2 text-xs bg-primary bg-opacity-10 text-primary px-2 py-0.5 rounded-full">You</span>
               )}

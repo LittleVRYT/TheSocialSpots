@@ -15,6 +15,7 @@ interface UseChatResult {
   sendMessage: (text: string) => void;
   setChatMode: (mode: 'local' | 'global') => void;
   setRegion: (region: ChatRegion) => void;
+  updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
 }
 
 export function useChat(): UseChatResult {
@@ -139,6 +140,17 @@ export function useChat(): UseChatResult {
               });
             }
             break;
+            
+          case MessageType.UPDATE_AVATAR:
+            // We don't need to update local state as we'll get an updated user list from the server
+            addMessage({
+              id: self.crypto.randomUUID(),
+              username: 'System',
+              text: 'Avatar updated',
+              timestamp: new Date(),
+              type: 'system'
+            });
+            break;
         }
       });
       
@@ -226,6 +238,22 @@ export function useChat(): UseChatResult {
       setRegionState(newRegion);
     }
   }, [region]);
+  
+  // Update avatar and send to server
+  const updateAvatar = useCallback((
+    avatarColor: string, 
+    avatarShape: 'circle' | 'square' | 'rounded', 
+    avatarInitials: string
+  ) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.UPDATE_AVATAR,
+        avatarColor,
+        avatarShape, 
+        avatarInitials
+      }));
+    }
+  }, []);
 
   return {
     users,
@@ -238,6 +266,7 @@ export function useChat(): UseChatResult {
     disconnect,
     sendMessage,
     setChatMode,
-    setRegion
+    setRegion,
+    updateAvatar
   };
 }
