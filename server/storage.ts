@@ -1,6 +1,6 @@
-import { users, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole } from "@shared/schema";
+import { users, chatUsers, chatMessages, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole } from "@shared/schema";
 import { v4 as uuidv4 } from 'uuid';
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db, pool } from './db';
 
 // modify the interface with any CRUD methods
@@ -91,12 +91,12 @@ export class PgStorage implements IStorage {
     
     try {
       // Check if user already exists and is active
-      const result = await pool.query(
-        'SELECT * FROM chat_users WHERE username = $1 AND is_active = TRUE',
-        [username]
-      );
+      const existingUsers = await db.select()
+        .from(chatUsers)
+        .where(eq(chatUsers.username, username))
+        .where(eq(chatUsers.isActive, true));
       
-      if (result.rows.length > 0) {
+      if (existingUsers.length > 0) {
         throw new Error('Username already taken');
       }
       
@@ -104,17 +104,20 @@ export class PgStorage implements IStorage {
       const userId = uuidv4();
       
       // Insert the new user
-      const insertResult = await pool.query(
-        'INSERT INTO chat_users (id, username, is_active, role) VALUES ($1, $2, TRUE, $3) RETURNING *',
-        [userId, username, role]
-      );
+      const [newUser] = await db.insert(chatUsers)
+        .values({
+          id: userId,
+          username,
+          isActive: true,
+          role
+        })
+        .returning();
       
-      const row = insertResult.rows[0];
       return {
-        id: row.id,
-        username: row.username,
-        isActive: row.is_active,
-        role: row.role as UserRole
+        id: newUser.id,
+        username: newUser.username,
+        isActive: newUser.isActive,
+        role: newUser.role as UserRole
       };
     } catch (error) {
       console.error("Error adding chat user:", error);
@@ -132,10 +135,9 @@ export class PgStorage implements IStorage {
   
   async removeChatUser(username: string): Promise<void> {
     try {
-      await pool.query(
-        'UPDATE chat_users SET is_active = FALSE WHERE username = $1',
-        [username]
-      );
+      await db.update(chatUsers)
+        .set({ isActive: false })
+        .where(eq(chatUsers.username, username));
     } catch (error) {
       console.error("Error removing chat user:", error);
     }
@@ -143,15 +145,15 @@ export class PgStorage implements IStorage {
   
   async getChatUsers(): Promise<ChatUser[]> {
     try {
-      const result = await pool.query(
-        'SELECT * FROM chat_users WHERE is_active = TRUE'
-      );
+      const users = await db.select()
+        .from(chatUsers)
+        .where(eq(chatUsers.isActive, true));
       
-      return result.rows.map(row => ({
-        id: row.id,
-        username: row.username,
-        isActive: row.is_active,
-        role: row.role as UserRole
+      return users.map(user => ({
+        id: user.id,
+        username: user.username,
+        isActive: user.isActive,
+        role: user.role as UserRole
       }));
     } catch (error) {
       console.error("Error getting chat users:", error);
@@ -164,18 +166,22 @@ export class PgStorage implements IStorage {
     const timestamp = new Date();
     
     try {
-      const result = await pool.query(
-        'INSERT INTO chat_messages (id, username, text, timestamp, type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [messageId, username, text, timestamp, type]
-      );
+      const [message] = await db.insert(chatMessages)
+        .values({
+          id: messageId,
+          username,
+          text,
+          timestamp,
+          type
+        })
+        .returning();
       
-      const row = result.rows[0];
       return {
-        id: row.id,
-        username: row.username,
-        text: row.text,
-        timestamp: new Date(row.timestamp),
-        type: row.type as 'user' | 'system'
+        id: message.id,
+        username: message.username,
+        text: message.text,
+        timestamp: new Date(message.timestamp),
+        type: message.type as 'user' | 'system'
       };
     } catch (error) {
       console.error("Error adding message:", error);
@@ -192,18 +198,20 @@ export class PgStorage implements IStorage {
   
   async getMessages(limit?: number): Promise<ChatMessage[]> {
     try {
-      const limitClause = limit ? `LIMIT ${limit}` : '';
+      let query = db.select().from(chatMessages).orderBy(chatMessages.timestamp);
       
-      const result = await pool.query(
-        `SELECT * FROM chat_messages ORDER BY timestamp ASC ${limitClause}`
-      );
+      if (limit) {
+        query = query.limit(limit);
+      }
       
-      return result.rows.map(row => ({
-        id: row.id,
-        username: row.username,
-        text: row.text,
-        timestamp: new Date(row.timestamp),
-        type: row.type as 'user' | 'system'
+      const messages = await query;
+      
+      return messages.map(msg => ({
+        id: msg.id,
+        username: msg.username,
+        text: msg.text,
+        timestamp: new Date(msg.timestamp),
+        type: msg.type as 'user' | 'system'
       }));
     } catch (error) {
       console.error("Error getting messages:", error);
