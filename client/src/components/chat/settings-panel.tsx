@@ -50,6 +50,9 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
           twilioConfigured?: boolean 
         }>('/api/user/test-sms', {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             phoneNumber: '+12345678900', // Sample number that won't actually be used
           }),
@@ -100,12 +103,17 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
         return;
       }
       
+      console.log("Saving settings for username:", currentUsername);
+      
       // Send settings to the server
       await apiRequest('/api/user/settings', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           username: currentUsername,
-          phoneNumber: phoneNumber || null,
+          phoneNumber: phoneNumber || '',
           notifyFriendOnline,
         }),
       });
@@ -141,9 +149,14 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
         return;
       }
       
+      console.log("Testing SMS with phone number:", phoneNumber);
+      
       // Send test SMS request
       const response = await apiRequest<{ success: boolean; twilioConfigured?: boolean }>('/api/user/test-sms', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           phoneNumber,
         }),
@@ -258,6 +271,9 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
                         twilioConfigured?: boolean 
                       }>('/api/user/test-sms', {
                         method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({
                           phoneNumber: '+12345678900', // Sample number that won't actually be used
                         }),

@@ -26,10 +26,21 @@ function getRegionDisplayName(region: ChatRegion): string {
 // Helper function to send SMS notifications via Twilio
 async function sendSmsNotification(phoneNumber: string, message: string): Promise<boolean> {
   try {
+    console.log("Attempting to send SMS to:", phoneNumber, "Message:", message);
+    
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
       console.error("Twilio credentials are missing from environment variables");
       return false;
     }
+
+    // Validate phone number format (basic E.164 format check)
+    if (!phoneNumber.startsWith('+')) {
+      console.log("Invalid phone number format:", phoneNumber);
+      return false;
+    }
+
+    console.log("Twilio credentials found, sending SMS...");
+    console.log("From:", process.env.TWILIO_PHONE_NUMBER, "To:", phoneNumber);
 
     const twilioClient = Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     
@@ -39,7 +50,7 @@ async function sendSmsNotification(phoneNumber: string, message: string): Promis
       to: phoneNumber
     });
     
-    console.log(`SMS notification sent to ${phoneNumber}`);
+    console.log(`SMS notification sent successfully to ${phoneNumber}`);
     return true;
   } catch (error) {
     console.error("Failed to send SMS notification:", error);
@@ -974,6 +985,8 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
     try {
       const { username, phoneNumber, notifyFriendOnline } = req.body;
       
+      console.log("Updating settings for user:", username, "Phone:", phoneNumber, "Notify:", notifyFriendOnline);
+      
       if (!username) {
         return res.status(400).json({
           message: 'Username is required'
@@ -1016,19 +1029,25 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
   // Test Twilio SMS endpoint (for testing SMS functionality)
   app.post('/api/user/test-sms', async (req: Request, res: Response) => {
     try {
+      console.log("Test SMS request received:", req.body);
       const { phoneNumber } = req.body;
       
       if (!phoneNumber) {
+        console.log("No phone number provided in request");
         return res.status(400).json({
           success: false,
           message: 'Phone number is required'
         });
       }
       
+      console.log("Testing SMS with phone number:", phoneNumber);
+      
       // Check if Twilio is configured
       const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && 
                                process.env.TWILIO_AUTH_TOKEN && 
                                process.env.TWILIO_PHONE_NUMBER);
+      
+      console.log("Twilio configured:", twilioConfigured);
       
       if (!twilioConfigured) {
         return res.status(503).json({
