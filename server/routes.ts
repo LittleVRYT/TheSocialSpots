@@ -6,6 +6,7 @@ import { MessageType, type WSMessage, ChatRegion, insertUserSchema, loginSchema,
 import OpenAI from "openai";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { containsBannedWords, filterMessage, isUsernameSafe } from "./profanity-filter";
 
 // Helper function to get a readable region name
 function getRegionDisplayName(region: ChatRegion): string {
@@ -61,6 +62,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ws.send(JSON.stringify({
                   type: MessageType.ERROR,
                   text: 'Username already taken'
+                }));
+                return;
+              }
+              
+              // Check if username contains profanity
+              if (!isUsernameSafe(message.username)) {
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Username contains inappropriate language. Please choose another username.'
                 }));
                 return;
               }
@@ -122,6 +132,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.CHAT: {
             const client = clients.get(ws);
             if (client && message.text) {
+              // Check for banned words
+              if (containsBannedWords(message.text)) {
+                // Filter the message
+                const filteredText = filterMessage(message.text);
+                
+                // Notify user about filtered content
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: "Your message contained inappropriate language and has been filtered.",
+                  timestamp: new Date().toISOString()
+                }));
+                
+                // Update message.text with filtered version
+                message.text = filteredText;
+              }
+              
               // Update user's last active time
               await storage.updateUserLastActive(client.username);
               
@@ -157,6 +183,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.PRIVATE_MESSAGE: {
             const client = clients.get(ws);
             if (client && message.text && message.recipient) {
+              // Check for banned words
+              if (containsBannedWords(message.text)) {
+                // Filter the message
+                const filteredText = filterMessage(message.text);
+                
+                // Notify user about filtered content
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: "Your private message contained inappropriate language and has been filtered.",
+                  timestamp: new Date().toISOString()
+                }));
+                
+                // Update message.text with filtered version
+                message.text = filteredText;
+              }
+              
               // Update user's last active time
               await storage.updateUserLastActive(client.username);
               
