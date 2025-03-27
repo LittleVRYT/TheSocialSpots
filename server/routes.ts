@@ -1,9 +1,11 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
-import { MessageType, type WSMessage, ChatRegion } from "@shared/schema";
+import { MessageType, type WSMessage, ChatRegion, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
 import OpenAI from "openai";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
 
 // Helper function to get a readable region name
 function getRegionDisplayName(region: ChatRegion): string {
@@ -460,7 +462,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let response: string;
 
       try {
-        // Try to use the OpenAI API
+        // Try to use the OpenAI API if available
+        if (!openai) {
+          throw new Error("OpenAI client not initialized");
+        }
+        
         const completion = await openai.chat.completions.create({
           model: "gpt-3.5-turbo",
           messages: [
@@ -560,6 +566,107 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
       res.status(500).json({ 
         error: 'Failed to get AI response', 
         details: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+
+  // Authentication Routes
+  // Register endpoint
+  app.post('/api/auth/register', async (req: Request, res: Response) => {
+    try {
+      // Validate request body
+      const result = registerSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: result.error.errors
+        });
+      }
+
+      const { username, password } = result.data;
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(409).json({ message: 'Username already exists' });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create new user
+      const newUser = await storage.createUser({
+        username,
+        password: hashedPassword
+      });
+
+      // Return user without password
+      res.status(201).json({
+        id: newUser.id,
+        username: newUser.username
+      });
+    } catch (error) {
+      console.error('Error registering user:', error);
+      res.status(500).json({
+        message: 'Error registering user',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Login endpoint
+  app.post('/api/auth/login', async (req: Request, res: Response) => {
+    try {
+      // Validate request body
+      const result = loginSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: result.error.errors
+        });
+      }
+
+      const { username, password } = result.data;
+
+      // Find user
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid username or password' });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Invalid username or password' });
+      }
+
+      // Return user without password
+      res.status(200).json({
+        id: user.id,
+        username: user.username
+      });
+    } catch (error) {
+      console.error('Error logging in:', error);
+      res.status(500).json({
+        message: 'Error logging in',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Check if username exists (for registration)
+  app.get('/api/auth/check-username/:username', async (req: Request, res: Response) => {
+    try {
+      const { username } = req.params;
+      
+      const user = await storage.getUserByUsername(username);
+      
+      res.json({ exists: !!user });
+    } catch (error) {
+      console.error('Error checking username:', error);
+      res.status(500).json({
+        message: 'Error checking username',
+        details: error instanceof Error ? error.message : String(error)
       });
     }
   });

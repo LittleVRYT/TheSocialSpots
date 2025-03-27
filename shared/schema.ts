@@ -38,6 +38,24 @@ export const insertUserSchema = createInsertSchema(users).pick({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// Authentication schemas
+export const loginSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(6),
+});
+
+export const registerSchema = z.object({
+  username: z.string().min(3).max(50),
+  password: z.string().min(6),
+  confirmPassword: z.string().min(6),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+export type LoginRequest = z.infer<typeof loginSchema>;
+export type RegisterRequest = z.infer<typeof registerSchema>;
 export type User = typeof users.$inferSelect;
 
 // Chat specific schemas and types
