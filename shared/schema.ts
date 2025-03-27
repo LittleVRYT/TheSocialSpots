@@ -31,6 +31,9 @@ export const chatMessages = pgTable("chat_messages", {
   recipient: text("recipient"),  // For private messages; null means public message
   isPrivate: boolean("is_private").default(false),
   reactions: json("reactions").$type<Record<string, string[]>>(), // Store emoji reactions as {emoji: [username1, username2, ...]}
+  isVoiceMessage: boolean("is_voice_message").default(false), // Whether this is a voice message
+  voiceData: text("voice_data"), // Base64 encoded audio data for voice messages
+  voiceDuration: integer("voice_duration"), // Duration of voice message in seconds
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -100,6 +103,9 @@ export type ChatMessage = {
   recipient?: string;  // For private messages
   isPrivate?: boolean; // Whether this is a private message
   reactions?: Record<string, string[]>; // Emoji reactions: { "👍": ["user1", "user2"], "❤️": ["user3"] }
+  isVoiceMessage?: boolean; // Whether this is a voice message
+  voiceData?: string; // Base64 encoded audio data for voice messages
+  voiceDuration?: number; // Duration of voice message in seconds
 };
 
 // WebSocket message types
@@ -116,7 +122,14 @@ export enum MessageType {
   UPDATE_AVATAR = 'update_avatar',
   ADD_REACTION = 'add_reaction',     // Add an emoji reaction to a message
   REMOVE_REACTION = 'remove_reaction', // Remove an emoji reaction from a message
-  UPDATE_REACTIONS = 'update_reactions' // Broadcast updated reactions to all users
+  UPDATE_REACTIONS = 'update_reactions', // Broadcast updated reactions to all users
+  VOICE_MESSAGE = 'voice_message',   // Send a voice message
+  VOICE_MESSAGE_PRIVATE = 'voice_message_private' // Send a private voice message
+}
+
+export enum MessageContentType {
+  TEXT = 'text',
+  VOICE = 'voice'
 }
 
 export type WSMessage = {
@@ -135,6 +148,9 @@ export type WSMessage = {
     recipient?: string;
     isPrivate?: boolean;
     reactions?: Record<string, string[]>; // Emoji reactions
+    isVoiceMessage?: boolean; // Whether this is a voice message
+    voiceData?: string; // Base64 encoded audio data
+    voiceDuration?: number; // Duration in seconds
   }>;
   chatMode?: 'global' | 'local'; // For chat mode updates
   region?: ChatRegion; // For region updates
@@ -146,4 +162,10 @@ export type WSMessage = {
   messageId?: string; // ID of the message being reacted to
   emoji?: string; // The emoji being used as a reaction
   reactions?: Record<string, string[]>; // Updated reactions for a message
+  
+  // Voice message fields
+  contentType?: MessageContentType; // Type of content (text or voice)
+  isVoiceMessage?: boolean; // Whether this is a voice message
+  voiceData?: string; // Base64 encoded audio data
+  voiceDuration?: number; // Duration in seconds
 };

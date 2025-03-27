@@ -15,6 +15,8 @@ interface UseChatResult {
   disconnect: () => void;
   sendMessage: (text: string) => void;
   sendPrivateMessage: (text: string, recipient: string) => void;
+  sendVoiceMessage: (text: string, voiceData: string, voiceDuration: number) => void;
+  sendPrivateVoiceMessage: (text: string, recipient: string, voiceData: string, voiceDuration: number) => void;
   setChatMode: (mode: 'local' | 'global') => void;
   setRegion: (region: ChatRegion) => void;
   updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
@@ -250,6 +252,34 @@ export function useChat(): UseChatResult {
       }));
     }
   }, []);
+
+  // Send voice message
+  const sendVoiceMessage = useCallback((text: string, voiceData: string, voiceDuration: number) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && voiceData) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.VOICE_MESSAGE,
+        text: text || "Voice message",
+        voiceData,
+        voiceDuration,
+        isVoiceMessage: true
+      }));
+    }
+  }, []);
+
+  // Send private voice message
+  const sendPrivateVoiceMessage = useCallback((text: string, recipient: string, voiceData: string, voiceDuration: number) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && voiceData && recipient) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.VOICE_MESSAGE_PRIVATE,
+        text: text || "Voice message",
+        recipient,
+        voiceData,
+        voiceDuration,
+        isVoiceMessage: true,
+        isPrivate: true
+      }));
+    }
+  }, []);
   
   // Disconnect and cleanup
   const disconnect = useCallback(() => {
@@ -345,6 +375,8 @@ export function useChat(): UseChatResult {
     disconnect,
     sendMessage,
     sendPrivateMessage,
+    sendVoiceMessage,
+    sendPrivateVoiceMessage,
     setChatMode,
     setRegion,
     updateAvatar,

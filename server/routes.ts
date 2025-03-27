@@ -180,6 +180,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
           }
           
+          case MessageType.VOICE_MESSAGE: {
+            const client = clients.get(ws);
+            if (client && message.text && message.voiceData !== undefined && message.voiceDuration !== undefined) {
+              // Update user's last active time
+              await storage.updateUserLastActive(client.username);
+              
+              // Store the voice message
+              const voiceMessage = await storage.addVoiceMessage(
+                client.username,
+                message.text, // Usually a placeholder like "Voice message"
+                message.voiceData,
+                message.voiceDuration
+              );
+              
+              // Determine how to broadcast based on chat mode
+              if (client.chatMode === 'global') {
+                // In global mode, broadcast to all clients
+                broadcastToAll({
+                  type: MessageType.VOICE_MESSAGE,
+                  username: client.username,
+                  text: message.text,
+                  timestamp: voiceMessage.timestamp.toISOString(),
+                  isVoiceMessage: true,
+                  voiceData: message.voiceData,
+                  voiceDuration: message.voiceDuration
+                });
+              } else {
+                // In local mode, only broadcast to the same region
+                broadcastToRegion({
+                  type: MessageType.VOICE_MESSAGE,
+                  username: client.username,
+                  text: message.text,
+                  timestamp: voiceMessage.timestamp.toISOString(),
+                  isVoiceMessage: true,
+                  voiceData: message.voiceData,
+                  voiceDuration: message.voiceDuration
+                }, client.region);
+              }
+            }
+            break;
+          }
+          
           case MessageType.PRIVATE_MESSAGE: {
             const client = clients.get(ws);
             if (client && message.text && message.recipient) {
@@ -219,6 +261,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 timestamp: privateMessage.timestamp.toISOString(),
                 recipient: message.recipient,
                 isPrivate: true
+              };
+              
+              // Send to recipient only
+              let recipientFound = false;
+              wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  const clientData = clients.get(client as WebSocket);
+                  if (clientData && clientData.username === message.recipient) {
+                    client.send(JSON.stringify(messagePayload));
+                    recipientFound = true;
+                  }
+                }
+              });
+              
+              // Send back to sender
+              ws.send(JSON.stringify(messagePayload));
+              
+              // If recipient not found, send a system message to sender
+              if (!recipientFound) {
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: `User ${message.recipient} is not online or doesn't exist.`,
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          case MessageType.VOICE_MESSAGE_PRIVATE: {
+            const client = clients.get(ws);
+            if (client && message.text && message.recipient && message.voiceData !== undefined && message.voiceDuration !== undefined) {
+              // Update user's last active time
+              await storage.updateUserLastActive(client.username);
+              
+              // Store the private voice message
+              const privateVoiceMessage = await storage.addVoiceMessage(
+                client.username,
+                message.text,
+                message.voiceData,
+                message.voiceDuration,
+                message.recipient,
+                true // Mark as private
+              );
+              
+              // Create message payload
+              const messagePayload = {
+                type: MessageType.VOICE_MESSAGE_PRIVATE,
+                username: client.username,
+                text: message.text,
+                timestamp: privateVoiceMessage.timestamp.toISOString(),
+                recipient: message.recipient,
+                isPrivate: true,
+                isVoiceMessage: true,
+                voiceData: message.voiceData,
+                voiceDuration: message.voiceDuration
               };
               
               // Send to recipient only
@@ -442,8 +540,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clientData = clients.get(client as WebSocket);
         
         if (clientData) {
-          // If it's a chat message, only send to global users
-          if (message.type === MessageType.CHAT && clientData.chatMode === 'local') {
+          // If it's a chat message or voice message, only send to global users
+          if ((message.type === MessageType.CHAT || message.type === MessageType.VOICE_MESSAGE) && 
+              clientData.chatMode === 'local') {
             // Don't send messages to local users unless it's through the region-specific broadcast
             return;
           }

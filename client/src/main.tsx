@@ -9,7 +9,7 @@ import { queryClient } from "@/lib/queryClient";
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system">
+      <ThemeProvider>
         <App />
       </ThemeProvider>
     </QueryClientProvider>

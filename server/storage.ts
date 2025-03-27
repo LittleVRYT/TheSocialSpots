@@ -18,6 +18,7 @@ export interface IStorage {
   
   // Message methods
   addMessage(username: string, text: string, type: 'user' | 'system', recipient?: string, isPrivate?: boolean): Promise<ChatMessage>;
+  addVoiceMessage(username: string, text: string, voiceData: string, voiceDuration: number, recipient?: string, isPrivate?: boolean): Promise<ChatMessage>;
   getMessages(limit?: number): Promise<ChatMessage[]>;
   getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]>;
   
@@ -121,15 +122,38 @@ export class PgStorage implements IStorage {
         );
       `);
       
-      // Check if reactions column exists, add it if it doesn't
+      // Check and add required columns if they don't exist
       await pool.query(`
         DO $$
         BEGIN
+          -- Check for reactions column
           IF NOT EXISTS (
             SELECT FROM information_schema.columns 
             WHERE table_name = 'chat_messages' AND column_name = 'reactions'
           ) THEN
             ALTER TABLE chat_messages ADD COLUMN reactions JSONB DEFAULT '{}';
+          END IF;
+          
+          -- Check for voice message related columns
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_messages' AND column_name = 'is_voice_message'
+          ) THEN
+            ALTER TABLE chat_messages ADD COLUMN is_voice_message BOOLEAN DEFAULT FALSE;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_messages' AND column_name = 'voice_data'
+          ) THEN
+            ALTER TABLE chat_messages ADD COLUMN voice_data TEXT;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_messages' AND column_name = 'voice_duration'
+          ) THEN
+            ALTER TABLE chat_messages ADD COLUMN voice_duration INTEGER;
           END IF;
         END
         $$;
@@ -293,7 +317,8 @@ export class PgStorage implements IStorage {
           timestamp,
           type,
           recipient,
-          isPrivate: isPrivate || false
+          isPrivate: isPrivate || false,
+          isVoiceMessage: false // Explicitly set to false for text messages
         })
         .returning();
       
@@ -304,7 +329,8 @@ export class PgStorage implements IStorage {
         timestamp: message.timestamp ? new Date(message.timestamp) : timestamp,
         type: message.type as 'user' | 'system',
         recipient: message.recipient || undefined,
-        isPrivate: message.isPrivate || false
+        isPrivate: message.isPrivate || false,
+        isVoiceMessage: false
       };
     } catch (error) {
       console.error("Error adding message:", error);
@@ -316,7 +342,58 @@ export class PgStorage implements IStorage {
         timestamp,
         type,
         recipient,
-        isPrivate: isPrivate || false
+        isPrivate: isPrivate || false,
+        isVoiceMessage: false
+      };
+    }
+  }
+  
+  async addVoiceMessage(username: string, text: string, voiceData: string, voiceDuration: number, recipient?: string, isPrivate?: boolean): Promise<ChatMessage> {
+    const messageId = uuidv4();
+    const timestamp = new Date();
+    
+    try {
+      const [message] = await db.insert(chatMessages)
+        .values({
+          id: messageId,
+          username,
+          text, // Usually a placeholder like "Voice message"
+          timestamp,
+          type: 'user',
+          recipient,
+          isPrivate: isPrivate || false,
+          isVoiceMessage: true,
+          voiceData,
+          voiceDuration
+        })
+        .returning();
+      
+      return {
+        id: message.id,
+        username: message.username,
+        text: message.text,
+        timestamp: message.timestamp ? new Date(message.timestamp) : timestamp,
+        type: message.type as 'user' | 'system',
+        recipient: message.recipient || undefined,
+        isPrivate: message.isPrivate || false,
+        isVoiceMessage: true,
+        voiceData,
+        voiceDuration
+      };
+    } catch (error) {
+      console.error("Error adding voice message:", error);
+      // Fallback to returning a message object without storing
+      return {
+        id: messageId,
+        username,
+        text,
+        timestamp,
+        type: 'user',
+        recipient,
+        isPrivate: isPrivate || false,
+        isVoiceMessage: true,
+        voiceData,
+        voiceDuration
       };
     }
   }
@@ -339,6 +416,9 @@ export class PgStorage implements IStorage {
         type: msg.type as 'user' | 'system',
         recipient: msg.recipient || undefined,
         isPrivate: msg.isPrivate || false,
+        isVoiceMessage: msg.isVoiceMessage || false,
+        voiceData: msg.voiceData || undefined,
+        voiceDuration: msg.voiceDuration || undefined,
         reactions: msg.reactions as Record<string, string[]> || {}
       }));
     } catch (error) {
@@ -382,6 +462,9 @@ export class PgStorage implements IStorage {
         type: msg.type as 'user' | 'system',
         recipient: msg.recipient || undefined,
         isPrivate: true,
+        isVoiceMessage: msg.isVoiceMessage || false,
+        voiceData: msg.voiceData || undefined,
+        voiceDuration: msg.voiceDuration || undefined,
         reactions: msg.reactions as Record<string, string[]> || {}
       }));
     } catch (error) {
@@ -560,7 +643,25 @@ export class MemStorage implements IStorage {
       timestamp: new Date(),
       type,
       recipient,
-      isPrivate: isPrivate || false
+      isPrivate: isPrivate || false,
+      isVoiceMessage: false
+    };
+    this.messages.push(message);
+    return message;
+  }
+  
+  async addVoiceMessage(username: string, text: string, voiceData: string, voiceDuration: number, recipient?: string, isPrivate?: boolean): Promise<ChatMessage> {
+    const message: ChatMessage = {
+      id: uuidv4(),
+      username,
+      text, // Usually a placeholder like "Voice message"
+      timestamp: new Date(),
+      type: 'user',
+      recipient,
+      isPrivate: isPrivate || false,
+      isVoiceMessage: true,
+      voiceData,
+      voiceDuration
     };
     this.messages.push(message);
     return message;

@@ -1,51 +1,34 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 
-type Theme = "dark" | "light" | "system";
-
+// Simplified theme provider that only uses light mode
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: Theme;
 };
 
+// Empty state since we're only using light mode
 type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  theme: "light";
+  setTheme: () => void;
 };
 
 const initialState: ThemeProviderState = {
-  theme: "system",
+  theme: "light",
   setTheme: () => null,
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
-export function ThemeProvider({
-  children,
-  defaultTheme = "system",
-}: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
-
+export function ThemeProvider({ children }: ThemeProviderProps) {
+  // Set light mode on initialization
   useEffect(() => {
     const root = window.document.documentElement;
-    
-    root.classList.remove("light", "dark");
-    
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-      
-      root.classList.add(systemTheme);
-      return;
-    }
-    
-    root.classList.add(theme);
-  }, [theme]);
+    root.classList.remove("dark");
+    root.classList.add("light");
+  }, []);
 
-  const value = {
-    theme,
-    setTheme,
+  const value: ThemeProviderState = {
+    theme: "light",
+    setTheme: () => {}, // No-op function since we only support light mode
   };
 
   return (
