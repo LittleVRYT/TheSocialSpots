@@ -28,7 +28,9 @@ export function ChatContainer() {
     chatMode,
     setChatMode,
     region,
-    setRegion
+    setRegion,
+    addReaction,
+    removeReaction
   } = useChat();
 
   // Handle username submit
@@ -155,6 +157,9 @@ export function ChatContainer() {
           <MessageList 
             messages={messages} 
             currentUsername={username || ''}
+            users={users}
+            onAddReaction={addReaction}
+            onRemoveReaction={removeReaction}
           />
           <MessageInput 
             onSendMessage={sendMessage} 

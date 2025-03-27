@@ -21,6 +21,11 @@ export interface IStorage {
   getMessages(limit?: number): Promise<ChatMessage[]>;
   getPrivateMessages(username: string, recipient: string, limit?: number): Promise<ChatMessage[]>;
   
+  // Reaction methods
+  addReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>>;
+  removeReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>>;
+  getMessageReactions(messageId: string): Promise<Record<string, string[]>>;
+  
   // Time tracking methods
   updateUserLastActive(username: string): Promise<void>;
   getUsersByTimeOnline(limit?: number): Promise<ChatUser[]>;
@@ -111,8 +116,23 @@ export class PgStorage implements IStorage {
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           type TEXT NOT NULL,
           recipient TEXT,
-          is_private BOOLEAN DEFAULT FALSE
+          is_private BOOLEAN DEFAULT FALSE,
+          reactions JSONB DEFAULT '{}'
         );
+      `);
+      
+      // Check if reactions column exists, add it if it doesn't
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_messages' AND column_name = 'reactions'
+          ) THEN
+            ALTER TABLE chat_messages ADD COLUMN reactions JSONB DEFAULT '{}';
+          END IF;
+        END
+        $$;
       `);
       console.log("Database initialized successfully");
     } catch (error) {
@@ -318,7 +338,8 @@ export class PgStorage implements IStorage {
         timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
         type: msg.type as 'user' | 'system',
         recipient: msg.recipient || undefined,
-        isPrivate: msg.isPrivate || false
+        isPrivate: msg.isPrivate || false,
+        reactions: msg.reactions as Record<string, string[]> || {}
       }));
     } catch (error) {
       console.error("Error getting messages:", error);
@@ -360,11 +381,99 @@ export class PgStorage implements IStorage {
         timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
         type: msg.type as 'user' | 'system',
         recipient: msg.recipient || undefined,
-        isPrivate: true
+        isPrivate: true,
+        reactions: msg.reactions as Record<string, string[]> || {}
       }));
     } catch (error) {
       console.error("Error getting private messages:", error);
       return [];
+    }
+  }
+  
+  // Reaction methods
+  async addReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>> {
+    try {
+      // Get the current message's reactions
+      const [message] = await db.select().from(chatMessages).where(eq(chatMessages.id, messageId));
+      
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+      
+      // Initialize reactions object if it doesn't exist
+      const reactions = message.reactions as Record<string, string[]> || {};
+      
+      // Initialize emoji array if it doesn't exist
+      if (!reactions[emoji]) {
+        reactions[emoji] = [];
+      }
+      
+      // Add username to the emoji's reactions if not already present
+      if (!reactions[emoji].includes(username)) {
+        reactions[emoji].push(username);
+      }
+      
+      // Update the message with the new reactions
+      await db.update(chatMessages)
+        .set({ reactions })
+        .where(eq(chatMessages.id, messageId));
+      
+      return reactions;
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+      return {};
+    }
+  }
+  
+  async removeReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>> {
+    try {
+      // Get the current message's reactions
+      const [message] = await db.select().from(chatMessages).where(eq(chatMessages.id, messageId));
+      
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+      
+      // Get the reactions object
+      const reactions = message.reactions as Record<string, string[]> || {};
+      
+      // If this emoji has reactions and the user has reacted with it
+      if (reactions[emoji] && reactions[emoji].includes(username)) {
+        // Remove the user from the emoji's reactions
+        reactions[emoji] = reactions[emoji].filter(user => user !== username);
+        
+        // If no users have this reaction anymore, remove the emoji key
+        if (reactions[emoji].length === 0) {
+          delete reactions[emoji];
+        }
+        
+        // Update the message with the new reactions
+        await db.update(chatMessages)
+          .set({ reactions })
+          .where(eq(chatMessages.id, messageId));
+      }
+      
+      return reactions;
+    } catch (error) {
+      console.error("Error removing reaction:", error);
+      return {};
+    }
+  }
+  
+  async getMessageReactions(messageId: string): Promise<Record<string, string[]>> {
+    try {
+      // Get the message
+      const [message] = await db.select().from(chatMessages).where(eq(chatMessages.id, messageId));
+      
+      if (!message) {
+        throw new Error(`Message with ID ${messageId} not found`);
+      }
+      
+      // Return the reactions
+      return message.reactions as Record<string, string[]> || {};
+    } catch (error) {
+      console.error("Error getting message reactions:", error);
+      return {};
     }
   }
 }
@@ -517,6 +626,74 @@ export class MemStorage implements IStorage {
       });
     
     return users.slice(0, limit);
+  }
+  
+  // Reaction methods
+  async addReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>> {
+    // Find the message by ID
+    const message = this.messages.find(msg => msg.id === messageId);
+    
+    if (!message) {
+      console.error(`Message with ID ${messageId} not found`);
+      return {};
+    }
+    
+    // Initialize reactions object if it doesn't exist
+    if (!message.reactions) {
+      message.reactions = {};
+    }
+    
+    // Initialize emoji array if it doesn't exist
+    if (!message.reactions[emoji]) {
+      message.reactions[emoji] = [];
+    }
+    
+    // Add username to the emoji's reactions if not already present
+    if (!message.reactions[emoji].includes(username)) {
+      message.reactions[emoji].push(username);
+    }
+    
+    return message.reactions;
+  }
+  
+  async removeReaction(messageId: string, username: string, emoji: string): Promise<Record<string, string[]>> {
+    // Find the message by ID
+    const message = this.messages.find(msg => msg.id === messageId);
+    
+    if (!message) {
+      console.error(`Message with ID ${messageId} not found`);
+      return {};
+    }
+    
+    // If no reactions object exists, return empty object
+    if (!message.reactions) {
+      return {};
+    }
+    
+    // If this emoji has reactions and the user has reacted with it
+    if (message.reactions[emoji] && message.reactions[emoji].includes(username)) {
+      // Remove the user from the emoji's reactions
+      message.reactions[emoji] = message.reactions[emoji].filter(user => user !== username);
+      
+      // If no users have this reaction anymore, remove the emoji key
+      if (message.reactions[emoji].length === 0) {
+        delete message.reactions[emoji];
+      }
+    }
+    
+    return message.reactions;
+  }
+  
+  async getMessageReactions(messageId: string): Promise<Record<string, string[]>> {
+    // Find the message by ID
+    const message = this.messages.find(msg => msg.id === messageId);
+    
+    if (!message) {
+      console.error(`Message with ID ${messageId} not found`);
+      return {};
+    }
+    
+    return message.reactions || {};
   }
 }
 

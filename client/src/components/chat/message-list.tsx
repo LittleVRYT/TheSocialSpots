@@ -1,7 +1,10 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ChatMessage } from "@shared/schema";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Smile } from "lucide-react";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -12,10 +15,22 @@ interface MessageListProps {
     avatarShape?: 'circle' | 'square' | 'rounded'; 
     avatarInitials?: string; 
   }[];
+  onAddReaction?: (messageId: string, emoji: string) => void;
+  onRemoveReaction?: (messageId: string, emoji: string) => void;
 }
 
-export function MessageList({ messages, currentUsername, users = [] }: MessageListProps) {
+export function MessageList({ 
+  messages, 
+  currentUsername, 
+  users = [], 
+  onAddReaction, 
+  onRemoveReaction 
+}: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  
+  // Common emoji reactions
+  const commonEmojis = ['👍', '❤️', '😂', '🔥', '👏', '🎉', '🤔', '😢', '😮', '👎'];
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -24,6 +39,26 @@ export function MessageList({ messages, currentUsername, users = [] }: MessageLi
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  // Handle adding a reaction
+  const handleAddReaction = (messageId: string, emoji: string) => {
+    if (onAddReaction) {
+      onAddReaction(messageId, emoji);
+    }
+  };
+  
+  // Handle removing a reaction
+  const handleRemoveReaction = (messageId: string, emoji: string) => {
+    if (onRemoveReaction) {
+      onRemoveReaction(messageId, emoji);
+    }
+  };
+  
+  // Check if current user has reacted with a specific emoji
+  const hasUserReacted = (reactions: Record<string, string[]> | undefined, emoji: string): boolean => {
+    if (!reactions || !reactions[emoji]) return false;
+    return reactions[emoji].includes(currentUsername);
   };
 
   // Group messages by date for date separators
@@ -91,12 +126,78 @@ export function MessageList({ messages, currentUsername, users = [] }: MessageLi
                         </>
                       )}
                     </div>
-                    <div className={
-                      message.username === currentUsername 
-                        ? "bg-primary bg-opacity-10 p-3 rounded-lg shadow-sm border border-primary border-opacity-20" 
-                        : "bg-white p-3 rounded-lg shadow-sm border border-gray-200"
-                    }>
+                    <div 
+                      className={`relative group ${
+                        message.username === currentUsername 
+                          ? "bg-primary bg-opacity-10 p-3 rounded-lg shadow-sm border border-primary border-opacity-20" 
+                          : "bg-white p-3 rounded-lg shadow-sm border border-gray-200"
+                      }`}
+                    >
                       <p className="text-gray-800">{message.text}</p>
+                      
+                      {/* Emoji Reaction Button */}
+                      <div className="absolute right-0 -top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 w-7 rounded-full p-0"
+                              onClick={() => setActiveMessageId(message.id)}
+                            >
+                              <Smile className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-2 bg-white" align="end">
+                            <div className="flex gap-1 flex-wrap max-w-[200px]">
+                              {commonEmojis.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  className="hover:bg-gray-100 p-1 rounded-md transition-colors"
+                                  onClick={() => {
+                                    if (hasUserReacted(message.reactions, emoji)) {
+                                      handleRemoveReaction(message.id, emoji);
+                                    } else {
+                                      handleAddReaction(message.id, emoji);
+                                    }
+                                  }}
+                                >
+                                  <span className="text-lg">{emoji}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      
+                      {/* Display existing reactions */}
+                      {message.reactions && Object.keys(message.reactions).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {Object.entries(message.reactions).map(([emoji, users]) => (
+                            users.length > 0 && (
+                              <button
+                                key={emoji}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                                  hasUserReacted(message.reactions, emoji)
+                                    ? 'bg-primary bg-opacity-20 text-primary'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                                onClick={() => {
+                                  if (hasUserReacted(message.reactions, emoji)) {
+                                    handleRemoveReaction(message.id, emoji);
+                                  } else {
+                                    handleAddReaction(message.id, emoji);
+                                  }
+                                }}
+                                title={users.join(', ')}
+                              >
+                                <span>{emoji}</span>
+                                <span>{users.length}</span>
+                              </button>
+                            )
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

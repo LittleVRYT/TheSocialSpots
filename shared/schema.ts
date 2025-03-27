@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -30,6 +30,7 @@ export const chatMessages = pgTable("chat_messages", {
   type: text("type").notNull(),
   recipient: text("recipient"),  // For private messages; null means public message
   isPrivate: boolean("is_private").default(false),
+  reactions: json("reactions").$type<Record<string, string[]>>(), // Store emoji reactions as {emoji: [username1, username2, ...]}
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -98,6 +99,7 @@ export type ChatMessage = {
   type: 'user' | 'system';
   recipient?: string;  // For private messages
   isPrivate?: boolean; // Whether this is a private message
+  reactions?: Record<string, string[]>; // Emoji reactions: { "👍": ["user1", "user2"], "❤️": ["user3"] }
 };
 
 // WebSocket message types
@@ -111,7 +113,10 @@ export enum MessageType {
   ERROR = 'error',
   UPDATE_CHAT_MODE = 'update_chat_mode',
   UPDATE_REGION = 'update_region',
-  UPDATE_AVATAR = 'update_avatar'
+  UPDATE_AVATAR = 'update_avatar',
+  ADD_REACTION = 'add_reaction',     // Add an emoji reaction to a message
+  REMOVE_REACTION = 'remove_reaction', // Remove an emoji reaction from a message
+  UPDATE_REACTIONS = 'update_reactions' // Broadcast updated reactions to all users
 }
 
 export type WSMessage = {
@@ -129,10 +134,16 @@ export type WSMessage = {
     timestamp: string;
     recipient?: string;
     isPrivate?: boolean;
+    reactions?: Record<string, string[]>; // Emoji reactions
   }>;
   chatMode?: 'global' | 'local'; // For chat mode updates
   region?: ChatRegion; // For region updates
   avatarColor?: string; // For avatar color updates
   avatarShape?: 'circle' | 'square' | 'rounded'; // For avatar shape updates
   avatarInitials?: string; // For avatar initials updates
+  
+  // Reaction-specific fields
+  messageId?: string; // ID of the message being reacted to
+  emoji?: string; // The emoji being used as a reaction
+  reactions?: Record<string, string[]>; // Updated reactions for a message
 };

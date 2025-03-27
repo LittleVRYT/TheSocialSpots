@@ -18,6 +18,8 @@ interface UseChatResult {
   setChatMode: (mode: 'local' | 'global') => void;
   setRegion: (region: ChatRegion) => void;
   updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
+  addReaction: (messageId: string, emoji: string) => void;
+  removeReaction: (messageId: string, emoji: string) => void;
 }
 
 export function useChat(): UseChatResult {
@@ -181,6 +183,17 @@ export function useChat(): UseChatResult {
               type: 'system'
             });
             break;
+            
+          case MessageType.UPDATE_REACTIONS:
+            if (data.messageId && data.reactions) {
+              // Update the reactions for the specific message
+              setMessages(prev => prev.map(msg => 
+                msg.id === data.messageId 
+                  ? { ...msg, reactions: data.reactions } 
+                  : msg
+              ));
+            }
+            break;
         }
       });
       
@@ -297,6 +310,28 @@ export function useChat(): UseChatResult {
       }));
     }
   }, []);
+  
+  // Add reaction to message
+  const addReaction = useCallback((messageId: string, emoji: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && messageId && emoji) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.ADD_REACTION,
+        messageId,
+        emoji
+      }));
+    }
+  }, []);
+  
+  // Remove reaction from message
+  const removeReaction = useCallback((messageId: string, emoji: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && messageId && emoji) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.REMOVE_REACTION,
+        messageId,
+        emoji
+      }));
+    }
+  }, []);
 
   return {
     users,
@@ -312,6 +347,8 @@ export function useChat(): UseChatResult {
     sendPrivateMessage,
     setChatMode,
     setRegion,
-    updateAvatar
+    updateAvatar,
+    addReaction,
+    removeReaction
   };
 }

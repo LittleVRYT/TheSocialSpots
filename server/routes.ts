@@ -323,6 +323,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             break;
           }
+          
+          // Handle adding an emoji reaction to a message
+          case MessageType.ADD_REACTION: {
+            const client = clients.get(ws);
+            if (client && message.messageId && message.emoji && client.username) {
+              try {
+                // Add the reaction to the message
+                const updatedReactions = await storage.addReaction(
+                  message.messageId,
+                  client.username,
+                  message.emoji
+                );
+                
+                // Broadcast the updated reactions to all clients
+                broadcastToAll({
+                  type: MessageType.UPDATE_REACTIONS,
+                  messageId: message.messageId,
+                  reactions: updatedReactions
+                });
+              } catch (error) {
+                console.error('Error adding reaction:', error);
+                // Send error message to client
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to add reaction',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          // Handle removing an emoji reaction from a message
+          case MessageType.REMOVE_REACTION: {
+            const client = clients.get(ws);
+            if (client && message.messageId && message.emoji && client.username) {
+              try {
+                // Remove the reaction from the message
+                const updatedReactions = await storage.removeReaction(
+                  message.messageId,
+                  client.username,
+                  message.emoji
+                );
+                
+                // Broadcast the updated reactions to all clients
+                broadcastToAll({
+                  type: MessageType.UPDATE_REACTIONS,
+                  messageId: message.messageId,
+                  reactions: updatedReactions
+                });
+              } catch (error) {
+                console.error('Error removing reaction:', error);
+                // Send error message to client
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to remove reaction',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
         }
       } catch (error) {
         console.error('Error processing message:', error);
@@ -473,6 +535,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         message: 'Error fetching leaderboard',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // API Route to get reactions for a specific message
+  app.get('/api/messages/:messageId/reactions', async (req, res) => {
+    try {
+      const { messageId } = req.params;
+      
+      if (!messageId) {
+        return res.status(400).json({ message: 'Message ID is required' });
+      }
+      
+      const reactions = await storage.getMessageReactions(messageId);
+      res.json(reactions);
+    } catch (error) {
+      res.status(500).json({ 
+        message: 'Error fetching message reactions',
         details: error instanceof Error ? error.message : String(error)
       });
     }
