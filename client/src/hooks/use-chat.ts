@@ -95,6 +95,21 @@ export function useChat(): UseChatResult {
             }
             break;
             
+          case MessageType.VOICE_MESSAGE:
+            if (data.username && data.text && data.timestamp && data.voiceData !== undefined && data.voiceDuration !== undefined) {
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: data.username,
+                text: data.text,
+                timestamp: new Date(data.timestamp),
+                type: 'user',
+                isVoiceMessage: true,
+                voiceData: data.voiceData,
+                voiceDuration: data.voiceDuration
+              });
+            }
+            break;
+            
           case MessageType.PRIVATE_MESSAGE:
             if (data.username && data.text && data.timestamp && data.recipient && data.isPrivate) {
               const privateMsg: ChatMessage = {
@@ -117,6 +132,37 @@ export function useChat(): UseChatResult {
                 const newMap = new Map(prev);
                 const existingMessages = newMap.get(otherUser) || [];
                 newMap.set(otherUser, [...existingMessages, privateMsg]);
+                return newMap;
+              });
+            }
+            break;
+            
+          case MessageType.VOICE_MESSAGE_PRIVATE:
+            if (data.username && data.text && data.timestamp && data.recipient && data.isPrivate && 
+                data.voiceData !== undefined && data.voiceDuration !== undefined) {
+              const privateVoiceMsg: ChatMessage = {
+                id: self.crypto.randomUUID(),
+                username: data.username,
+                text: data.text,
+                timestamp: new Date(data.timestamp),
+                type: 'user',
+                recipient: data.recipient,
+                isPrivate: true,
+                isVoiceMessage: true,
+                voiceData: data.voiceData,
+                voiceDuration: data.voiceDuration
+              };
+              
+              // Determine the key to use for storing the private message
+              // If this user sent the message, use the recipient's name as the key
+              // If this user received the message, use the sender's name as the key
+              const otherUser = data.username === usernameRef.current ? data.recipient : data.username;
+              
+              // Add to private messages map
+              setPrivateMessages(prev => {
+                const newMap = new Map(prev);
+                const existingMessages = newMap.get(otherUser) || [];
+                newMap.set(otherUser, [...existingMessages, privateVoiceMsg]);
                 return newMap;
               });
             }

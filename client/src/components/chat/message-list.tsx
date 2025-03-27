@@ -1,10 +1,10 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { ChatMessage } from "@shared/schema";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Smile } from "lucide-react";
+import { Smile, Play, Pause } from "lucide-react";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -28,9 +28,47 @@ export function MessageList({
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   
   // Common emoji reactions
   const commonEmojis = ['👍', '❤️', '😂', '🔥', '👏', '🎉', '🤔', '😢', '😮', '👎'];
+
+  // Handle playing/pausing voice messages
+  const toggleAudioPlayback = useCallback((messageId: string, voiceData: string) => {
+    // Create or get audio element for this message
+    let audioElement = audioRefs.current.get(messageId);
+    
+    if (!audioElement) {
+      audioElement = new Audio(voiceData);
+      audioRefs.current.set(messageId, audioElement);
+      
+      // Add event listener for when audio finishes playing
+      audioElement.addEventListener('ended', () => {
+        setPlayingAudio(null);
+      });
+    }
+    
+    // If this message's audio is already playing, pause it
+    if (playingAudio === messageId) {
+      audioElement.pause();
+      setPlayingAudio(null);
+    } else {
+      // If another audio is playing, pause it first
+      if (playingAudio && audioRefs.current.has(playingAudio)) {
+        const currentPlaying = audioRefs.current.get(playingAudio);
+        if (currentPlaying) {
+          currentPlaying.pause();
+        }
+      }
+      
+      // Play this message's audio
+      audioElement.play().catch(err => {
+        console.error("Error playing audio:", err);
+      });
+      setPlayingAudio(messageId);
+    }
+  }, [playingAudio]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -133,7 +171,38 @@ export function MessageList({
                           : "bg-white p-3 rounded-lg shadow-sm border border-gray-200"
                       }`}
                     >
-                      <p className="text-gray-800">{message.text}</p>
+                      {message.isVoiceMessage && message.voiceData ? (
+                        <div className="voice-message-container">
+                          <div className="flex items-center gap-2 mb-2">
+                            <button 
+                              className="play-button bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center"
+                              onClick={() => toggleAudioPlayback(message.id, message.voiceData!)}
+                            >
+                              {playingAudio === message.id ? (
+                                <Pause className="h-4 w-4" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </button>
+                            <div className="voice-waveform bg-gray-200 h-6 flex-grow rounded-md">
+                              <div 
+                                className={`bg-primary h-full rounded-md transition-all duration-200`} 
+                                style={{ 
+                                  width: playingAudio === message.id ? '100%' : '0%',
+                                  transition: playingAudio === message.id ? 'width linear' : 'none',
+                                  transitionDuration: playingAudio === message.id && message.voiceDuration ? `${message.voiceDuration}s` : '0s' 
+                                }}
+                              />
+                            </div>
+                            <span className="voice-duration text-xs text-gray-500">
+                              {message.voiceDuration ? `${Math.round(message.voiceDuration)}s` : '0:00'}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 text-sm">{message.text}</p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-800">{message.text}</p>
+                      )}
                       
                       {/* Emoji Reaction Button */}
                       <div className="absolute right-0 -top-3 opacity-0 group-hover:opacity-100 transition-opacity">

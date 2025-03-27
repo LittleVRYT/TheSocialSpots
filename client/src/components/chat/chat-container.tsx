@@ -23,6 +23,7 @@ export function ChatContainer() {
     connect, 
     disconnect, 
     sendMessage, 
+    sendVoiceMessage,
     connectionStatus,
     error,
     chatMode,
@@ -162,7 +163,8 @@ export function ChatContainer() {
             onRemoveReaction={removeReaction}
           />
           <MessageInput 
-            onSendMessage={sendMessage} 
+            onSendMessage={sendMessage}
+            onSendVoiceMessage={sendVoiceMessage} 
             disabled={connectionStatus !== 'connected'}
           />
         </div>
