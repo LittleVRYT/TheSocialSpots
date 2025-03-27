@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion } from '@shared/schema';
+import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion, Friend, FriendStatus } from '@shared/schema';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -11,6 +11,8 @@ interface UseChatResult {
   error: string | null;
   chatMode: 'local' | 'global';
   region: ChatRegion;
+  friends: Friend[];
+  friendRequests: Friend[];
   connect: (username: string) => void;
   disconnect: () => void;
   sendMessage: (text: string) => void;
@@ -22,6 +24,12 @@ interface UseChatResult {
   updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
   addReaction: (messageId: string, emoji: string) => void;
   removeReaction: (messageId: string, emoji: string) => void;
+  // Friend system methods
+  sendFriendRequest: (username: string) => void;
+  acceptFriendRequest: (username: string) => void;
+  rejectFriendRequest: (username: string) => void;
+  removeFriend: (username: string) => void;
+  updateFriendColor: (username: string, color: string) => void;
 }
 
 export function useChat(): UseChatResult {
@@ -32,6 +40,8 @@ export function useChat(): UseChatResult {
   const [error, setError] = useState<string | null>(null);
   const [chatMode, setChatModeState] = useState<'local' | 'global'>('global');
   const [region, setRegionState] = useState<ChatRegion>(ChatRegion.GLOBAL);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [friendRequests, setFriendRequests] = useState<Friend[]>([]);
   
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef<string | null>(null);
@@ -242,6 +252,93 @@ export function useChat(): UseChatResult {
               ));
             }
             break;
+            
+          // Friend system message types
+          case MessageType.FRIEND_LIST_UPDATE:
+            if (data.friends) {
+              setFriends(data.friends);
+            }
+            break;
+            
+          case MessageType.FRIEND_REQUEST:
+            if (data.friendUsername && data.friendStatus === FriendStatus.PENDING) {
+              // Add to friend requests
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `You received a friend request from ${data.friendUsername}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+              
+              // Update friend requests list
+              if (data.friends) {
+                setFriendRequests(data.friends.filter(f => f.status === FriendStatus.PENDING));
+              }
+            }
+            break;
+            
+          case MessageType.FRIEND_ACCEPT:
+            if (data.friendUsername && data.friendStatus === FriendStatus.ACCEPTED) {
+              // Add system message
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `${data.friendUsername} accepted your friend request`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+              
+              // Update friends list
+              if (data.friends) {
+                setFriends(data.friends.filter(f => f.status === FriendStatus.ACCEPTED));
+              }
+            }
+            break;
+            
+          case MessageType.FRIEND_REJECT:
+            if (data.friendUsername && data.friendStatus === FriendStatus.REJECTED) {
+              // Add system message
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `${data.friendUsername} rejected your friend request`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+            }
+            break;
+            
+          case MessageType.FRIEND_REMOVE:
+            if (data.friendUsername) {
+              // Add system message
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `You are no longer friends with ${data.friendUsername}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+              
+              // Update friends list
+              if (data.friends) {
+                setFriends(data.friends.filter(f => f.status === FriendStatus.ACCEPTED));
+              }
+            }
+            break;
+            
+          case MessageType.FRIEND_COLOR_UPDATE:
+            if (data.friendUsername && data.friendColor) {
+              // Update color in friend list
+              setFriends(prev => 
+                prev.map(friend => 
+                  friend.username === data.friendUsername
+                    ? { ...friend, color: data.friendColor }
+                    : friend
+                )
+              );
+            }
+            break;
         }
       });
       
@@ -408,6 +505,53 @@ export function useChat(): UseChatResult {
       }));
     }
   }, []);
+  
+  // Friend system methods
+  const sendFriendRequest = useCallback((username: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && username) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.FRIEND_REQUEST,
+        friendUsername: username
+      }));
+    }
+  }, []);
+  
+  const acceptFriendRequest = useCallback((username: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && username) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.FRIEND_ACCEPT,
+        friendUsername: username
+      }));
+    }
+  }, []);
+  
+  const rejectFriendRequest = useCallback((username: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && username) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.FRIEND_REJECT,
+        friendUsername: username
+      }));
+    }
+  }, []);
+  
+  const removeFriend = useCallback((username: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && username) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.FRIEND_REMOVE,
+        friendUsername: username
+      }));
+    }
+  }, []);
+  
+  const updateFriendColor = useCallback((username: string, color: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && username && color) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.FRIEND_COLOR_UPDATE,
+        friendUsername: username,
+        friendColor: color
+      }));
+    }
+  }, []);
 
   return {
     users,
@@ -417,6 +561,8 @@ export function useChat(): UseChatResult {
     error,
     chatMode,
     region,
+    friends,
+    friendRequests,
     connect,
     disconnect,
     sendMessage,
@@ -427,6 +573,12 @@ export function useChat(): UseChatResult {
     setRegion,
     updateAvatar,
     addReaction,
-    removeReaction
+    removeReaction,
+    // Friend system methods
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    removeFriend,
+    updateFriendColor
   };
 }

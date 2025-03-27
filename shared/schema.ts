@@ -2,6 +2,13 @@ import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzl
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Enum for friend request status
+export enum FriendStatus {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected'
+}
+
 // Define tables to match existing database structure
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -34,6 +41,26 @@ export const chatMessages = pgTable("chat_messages", {
   isVoiceMessage: boolean("is_voice_message").default(false), // Whether this is a voice message
   voiceData: text("voice_data"), // Base64 encoded audio data for voice messages
   voiceDuration: integer("voice_duration"), // Duration of voice message in seconds
+});
+
+// Friend relationships table
+export const friendships = pgTable("friendships", {
+  id: serial("id").primaryKey(),
+  requesterId: text("requester_id").notNull(), // Username of the person who sent the request
+  addresseeId: text("addressee_id").notNull(), // Username of the person who received the request
+  status: text("status").notNull().$type<FriendStatus>().default(FriendStatus.PENDING),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Friend color preferences
+export const friendColors = pgTable("friend_colors", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(), // Username of user
+  friendId: text("friend_id").notNull(), // Username of friend
+  color: text("color").notNull().default('rgb(99, 102, 241)'), // Default color (indigo)
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -124,13 +151,28 @@ export enum MessageType {
   REMOVE_REACTION = 'remove_reaction', // Remove an emoji reaction from a message
   UPDATE_REACTIONS = 'update_reactions', // Broadcast updated reactions to all users
   VOICE_MESSAGE = 'voice_message',   // Send a voice message
-  VOICE_MESSAGE_PRIVATE = 'voice_message_private' // Send a private voice message
+  VOICE_MESSAGE_PRIVATE = 'voice_message_private', // Send a private voice message
+  
+  // Friend system message types
+  FRIEND_REQUEST = 'friend_request', // Send a friend request
+  FRIEND_ACCEPT = 'friend_accept',   // Accept a friend request
+  FRIEND_REJECT = 'friend_reject',   // Reject a friend request
+  FRIEND_REMOVE = 'friend_remove',   // Remove a friend
+  FRIEND_COLOR_UPDATE = 'friend_color_update', // Update a friend's color preference
+  FRIEND_LIST_UPDATE = 'friend_list_update'  // Update the friend list
 }
 
 export enum MessageContentType {
   TEXT = 'text',
   VOICE = 'voice'
 }
+
+// Friend system types
+export type Friend = {
+  username: string;
+  status: FriendStatus;
+  color?: string;
+};
 
 export type WSMessage = {
   type: MessageType | string; // Allow string for custom message types
@@ -168,4 +210,10 @@ export type WSMessage = {
   isVoiceMessage?: boolean; // Whether this is a voice message
   voiceData?: string; // Base64 encoded audio data
   voiceDuration?: number; // Duration in seconds
+  
+  // Friend system fields
+  friendUsername?: string; // Username of the friend
+  friendStatus?: FriendStatus; // Status of the friend relationship
+  friendColor?: string; // RGB color for the friend's name
+  friends?: Friend[]; // List of friends for a user
 };

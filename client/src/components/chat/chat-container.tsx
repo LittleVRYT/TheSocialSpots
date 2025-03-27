@@ -5,9 +5,10 @@ import { MessageList } from "./message-list";
 import { MessageInput } from "./message-input";
 import { OnlineUsers } from "./online-users";
 import { Leaderboard } from "./leaderboard";
+import { FriendPanel } from "./friend-panel";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Wifi, Trophy } from "lucide-react";
+import { Globe, Wifi, Trophy, UserPlus } from "lucide-react";
 import { ChatRegion, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -15,6 +16,7 @@ export function ChatContainer() {
   const [username, setUsername] = useState<string | null>(null);
   const [isUsersVisible, setIsUsersVisible] = useState(false);
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
+  const [isFriendPanelVisible, setIsFriendPanelVisible] = useState(false);
   const { toast } = useToast();
   
   const { 
@@ -31,7 +33,15 @@ export function ChatContainer() {
     region,
     setRegion,
     addReaction,
-    removeReaction
+    removeReaction,
+    // Friend system
+    friends,
+    friendRequests,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    removeFriend,
+    updateFriendColor
   } = useChat();
 
   // Handle username submit
@@ -52,11 +62,28 @@ export function ChatContainer() {
     if (isLeaderboardVisible) {
       setIsLeaderboardVisible(false);
     }
+    if (isFriendPanelVisible) {
+      setIsFriendPanelVisible(false);
+    }
   };
   
   // Toggle leaderboard visibility
   const toggleLeaderboard = () => {
     setIsLeaderboardVisible(!isLeaderboardVisible);
+    if (isUsersVisible) {
+      setIsUsersVisible(false);
+    }
+    if (isFriendPanelVisible) {
+      setIsFriendPanelVisible(false);
+    }
+  };
+  
+  // Toggle friend panel visibility
+  const toggleFriendPanel = () => {
+    setIsFriendPanelVisible(!isFriendPanelVisible);
+    if (isLeaderboardVisible) {
+      setIsLeaderboardVisible(false);
+    }
     if (isUsersVisible) {
       setIsUsersVisible(false);
     }

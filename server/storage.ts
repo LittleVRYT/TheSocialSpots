@@ -1,6 +1,6 @@
-import { users, chatUsers, chatMessages, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole } from "@shared/schema";
+import { users, chatUsers, chatMessages, friendships, friendColors, type User, type InsertUser, type ChatUser, type ChatMessage, UserRole, FriendStatus, type Friend } from "@shared/schema";
 import { v4 as uuidv4 } from 'uuid';
-import { eq, desc, and, or } from "drizzle-orm";
+import { eq, desc, and, or, asc } from "drizzle-orm";
 import { db, pool } from './db';
 
 // modify the interface with any CRUD methods
@@ -30,6 +30,16 @@ export interface IStorage {
   // Time tracking methods
   updateUserLastActive(username: string): Promise<void>;
   getUsersByTimeOnline(limit?: number): Promise<ChatUser[]>;
+  
+  // Friend system methods
+  sendFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
+  acceptFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
+  rejectFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
+  removeFriend(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
+  getFriends(username: string): Promise<Friend[]>;
+  getFriendRequests(username: string): Promise<Friend[]>;
+  updateFriendColor(username: string, friendUsername: string, color: string): Promise<boolean>;
+  getFriendColor(username: string, friendUsername: string): Promise<string | undefined>;
   
   // Database initialization
   initialize(): Promise<void>;
@@ -120,6 +130,25 @@ export class PgStorage implements IStorage {
           is_private BOOLEAN DEFAULT FALSE,
           reactions JSONB DEFAULT '{}'
         );
+        
+        -- Create friendship tables
+        CREATE TABLE IF NOT EXISTS friendships (
+          id SERIAL PRIMARY KEY,
+          requester_id TEXT NOT NULL,
+          addressee_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS friend_colors (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          friend_id TEXT NOT NULL,
+          color TEXT NOT NULL DEFAULT 'rgb(99, 102, 241)',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
       `);
       
       // Check and add required columns if they don't exist
@@ -154,6 +183,28 @@ export class PgStorage implements IStorage {
             WHERE table_name = 'chat_messages' AND column_name = 'voice_duration'
           ) THEN
             ALTER TABLE chat_messages ADD COLUMN voice_duration INTEGER;
+          END IF;
+          
+          -- Add join and last active time tracking to chat_users if they don't exist
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_users' AND column_name = 'join_time'
+          ) THEN
+            ALTER TABLE chat_users ADD COLUMN join_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_users' AND column_name = 'last_active'
+          ) THEN
+            ALTER TABLE chat_users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_users' AND column_name = 'total_time_online'
+          ) THEN
+            ALTER TABLE chat_users ADD COLUMN total_time_online INTEGER DEFAULT 0;
           END IF;
         END
         $$;
@@ -559,18 +610,389 @@ export class PgStorage implements IStorage {
       return {};
     }
   }
+  
+  // Friend system methods
+  async sendFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    try {
+      if (requesterUsername === addresseeUsername) {
+        console.error("Cannot send friend request to yourself");
+        return false;
+      }
+      
+      // Check if a request already exists
+      const existingRequests = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, requesterUsername),
+            eq(friendships.addresseeId, addresseeUsername)
+          )
+        );
+      
+      if (existingRequests.length > 0) {
+        console.log("Friend request already exists");
+        return false;
+      }
+      
+      // Create a new friend request
+      await db.insert(friendships)
+        .values({
+          requesterId: requesterUsername,
+          addresseeId: addresseeUsername,
+          status: FriendStatus.PENDING
+        });
+      
+      return true;
+    } catch (error) {
+      console.error("Error sending friend request:", error);
+      return false;
+    }
+  }
+  
+  async acceptFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    try {
+      // Find the request
+      const [request] = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, requesterUsername),
+            eq(friendships.addresseeId, addresseeUsername),
+            eq(friendships.status, FriendStatus.PENDING)
+          )
+        );
+      
+      if (!request) {
+        console.error("Friend request not found");
+        return false;
+      }
+      
+      // Update the request status
+      await db.update(friendships)
+        .set({ 
+          status: FriendStatus.ACCEPTED,
+          updatedAt: new Date()
+        })
+        .where(eq(friendships.id, request.id));
+      
+      // Create default friend colors if they don't exist
+      const defaultColor = 'rgb(99, 102, 241)'; // Default indigo
+      
+      // Set color for requester
+      const requesterColorExists = await db.select()
+        .from(friendColors)
+        .where(
+          and(
+            eq(friendColors.userId, addresseeUsername),
+            eq(friendColors.friendId, requesterUsername)
+          )
+        );
+      
+      if (requesterColorExists.length === 0) {
+        await db.insert(friendColors)
+          .values({
+            userId: addresseeUsername,
+            friendId: requesterUsername,
+            color: defaultColor
+          });
+      }
+      
+      // Set color for addressee
+      const addresseeColorExists = await db.select()
+        .from(friendColors)
+        .where(
+          and(
+            eq(friendColors.userId, requesterUsername),
+            eq(friendColors.friendId, addresseeUsername)
+          )
+        );
+      
+      if (addresseeColorExists.length === 0) {
+        await db.insert(friendColors)
+          .values({
+            userId: requesterUsername,
+            friendId: addresseeUsername,
+            color: defaultColor
+          });
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error accepting friend request:", error);
+      return false;
+    }
+  }
+  
+  async rejectFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    try {
+      // Find the request
+      const [request] = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, requesterUsername),
+            eq(friendships.addresseeId, addresseeUsername),
+            eq(friendships.status, FriendStatus.PENDING)
+          )
+        );
+      
+      if (!request) {
+        console.error("Friend request not found");
+        return false;
+      }
+      
+      // Update the request status
+      await db.update(friendships)
+        .set({ 
+          status: FriendStatus.REJECTED,
+          updatedAt: new Date()
+        })
+        .where(eq(friendships.id, request.id));
+      
+      return true;
+    } catch (error) {
+      console.error("Error rejecting friend request:", error);
+      return false;
+    }
+  }
+  
+  async removeFriend(username: string, friendUsername: string): Promise<boolean> {
+    try {
+      // Find all friend relationships between these users
+      const friendships1 = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, username),
+            eq(friendships.addresseeId, friendUsername),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      const friendships2 = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, friendUsername),
+            eq(friendships.addresseeId, username),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      // Delete the friendships
+      if (friendships1.length > 0) {
+        await db.delete(friendships)
+          .where(eq(friendships.id, friendships1[0].id));
+      }
+      
+      if (friendships2.length > 0) {
+        await db.delete(friendships)
+          .where(eq(friendships.id, friendships2[0].id));
+      }
+      
+      // Remove color preferences
+      await db.delete(friendColors)
+        .where(
+          or(
+            and(
+              eq(friendColors.userId, username),
+              eq(friendColors.friendId, friendUsername)
+            ),
+            and(
+              eq(friendColors.userId, friendUsername),
+              eq(friendColors.friendId, username)
+            )
+          )
+        );
+      
+      return true;
+    } catch (error) {
+      console.error("Error removing friend:", error);
+      return false;
+    }
+  }
+  
+  async getFriends(username: string): Promise<Friend[]> {
+    try {
+      // Find friends where the user was the requester
+      const sentRequests = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, username),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      // Find friends where the user was the addressee
+      const receivedRequests = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.addresseeId, username),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      // Combine the results
+      const friendsList: Friend[] = [];
+      
+      for (const request of sentRequests) {
+        const color = await this.getFriendColor(username, request.addresseeId);
+        friendsList.push({
+          username: request.addresseeId,
+          status: FriendStatus.ACCEPTED,
+          color: color || 'rgb(99, 102, 241)'
+        });
+      }
+      
+      for (const request of receivedRequests) {
+        const color = await this.getFriendColor(username, request.requesterId);
+        friendsList.push({
+          username: request.requesterId,
+          status: FriendStatus.ACCEPTED,
+          color: color || 'rgb(99, 102, 241)'
+        });
+      }
+      
+      return friendsList;
+    } catch (error) {
+      console.error("Error getting friends:", error);
+      return [];
+    }
+  }
+  
+  async getFriendRequests(username: string): Promise<Friend[]> {
+    try {
+      // Find pending requests where the user is the addressee
+      const requests = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.addresseeId, username),
+            eq(friendships.status, FriendStatus.PENDING)
+          )
+        );
+      
+      // Convert to Friend objects
+      return requests.map(request => ({
+        username: request.requesterId,
+        status: FriendStatus.PENDING
+      }));
+    } catch (error) {
+      console.error("Error getting friend requests:", error);
+      return [];
+    }
+  }
+  
+  async updateFriendColor(username: string, friendUsername: string, color: string): Promise<boolean> {
+    try {
+      // Check if these users are friends
+      const isFriend = await this.areFriends(username, friendUsername);
+      
+      if (!isFriend) {
+        console.error("Users are not friends");
+        return false;
+      }
+      
+      // Find existing color preference
+      const colorPrefs = await db.select()
+        .from(friendColors)
+        .where(
+          and(
+            eq(friendColors.userId, username),
+            eq(friendColors.friendId, friendUsername)
+          )
+        );
+      
+      if (colorPrefs.length > 0) {
+        // Update existing preference
+        await db.update(friendColors)
+          .set({ 
+            color: color,
+            updatedAt: new Date()
+          })
+          .where(eq(friendColors.id, colorPrefs[0].id));
+      } else {
+        // Create new preference
+        await db.insert(friendColors)
+          .values({
+            userId: username,
+            friendId: friendUsername,
+            color: color
+          });
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error updating friend color:", error);
+      return false;
+    }
+  }
+  
+  async getFriendColor(username: string, friendUsername: string): Promise<string | undefined> {
+    try {
+      const [colorPref] = await db.select()
+        .from(friendColors)
+        .where(
+          and(
+            eq(friendColors.userId, username),
+            eq(friendColors.friendId, friendUsername)
+          )
+        );
+      
+      return colorPref?.color;
+    } catch (error) {
+      console.error("Error getting friend color:", error);
+      return undefined;
+    }
+  }
+  
+  // Helper method to check if users are friends
+  private async areFriends(user1: string, user2: string): Promise<boolean> {
+    try {
+      const friendship1 = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, user1),
+            eq(friendships.addresseeId, user2),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      const friendship2 = await db.select()
+        .from(friendships)
+        .where(
+          and(
+            eq(friendships.requesterId, user2),
+            eq(friendships.addresseeId, user1),
+            eq(friendships.status, FriendStatus.ACCEPTED)
+          )
+        );
+      
+      return friendship1.length > 0 || friendship2.length > 0;
+    } catch (error) {
+      console.error("Error checking friendship status:", error);
+      return false;
+    }
+  }
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private chatUsers: Map<string, ChatUser>;
   private messages: ChatMessage[];
+  private friendRequests: Map<string, { requester: string, addressee: string, status: FriendStatus }>;
+  private friendColors: Map<string, { user: string, friend: string, color: string }>;
   currentId: number;
 
   constructor() {
     this.users = new Map();
     this.chatUsers = new Map();
     this.messages = [];
+    this.friendRequests = new Map();
+    this.friendColors = new Map();
     this.currentId = 1;
   }
   
@@ -795,6 +1217,193 @@ export class MemStorage implements IStorage {
     }
     
     return message.reactions || {};
+  }
+  
+  // Friend system implementation for memory storage
+  
+  async sendFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    if (requesterUsername === addresseeUsername) {
+      console.error("Cannot send friend request to yourself");
+      return false;
+    }
+    
+    // Generate a unique ID for the request
+    const requestId = `${requesterUsername}_${addresseeUsername}`;
+    
+    // Check if a request already exists
+    if (this.friendRequests.has(requestId)) {
+      console.log("Friend request already exists");
+      return false;
+    }
+    
+    // Create a new friend request
+    this.friendRequests.set(requestId, {
+      requester: requesterUsername,
+      addressee: addresseeUsername,
+      status: FriendStatus.PENDING
+    });
+    
+    return true;
+  }
+  
+  async acceptFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    const requestId = `${requesterUsername}_${addresseeUsername}`;
+    const request = this.friendRequests.get(requestId);
+    
+    if (!request || request.status !== FriendStatus.PENDING) {
+      console.error("Friend request not found or not pending");
+      return false;
+    }
+    
+    // Update the request status
+    request.status = FriendStatus.ACCEPTED;
+    
+    // Set default colors
+    const defaultColor = 'rgb(99, 102, 241)'; // Default indigo
+    
+    // Create color preferences for both users
+    const color1Id = `${addresseeUsername}_${requesterUsername}`;
+    const color2Id = `${requesterUsername}_${addresseeUsername}`;
+    
+    this.friendColors.set(color1Id, {
+      user: addresseeUsername,
+      friend: requesterUsername,
+      color: defaultColor
+    });
+    
+    this.friendColors.set(color2Id, {
+      user: requesterUsername,
+      friend: addresseeUsername,
+      color: defaultColor
+    });
+    
+    return true;
+  }
+  
+  async rejectFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean> {
+    const requestId = `${requesterUsername}_${addresseeUsername}`;
+    const request = this.friendRequests.get(requestId);
+    
+    if (!request || request.status !== FriendStatus.PENDING) {
+      console.error("Friend request not found or not pending");
+      return false;
+    }
+    
+    // Update the request status
+    request.status = FriendStatus.REJECTED;
+    
+    return true;
+  }
+  
+  async removeFriend(username: string, friendUsername: string): Promise<boolean> {
+    const requestId1 = `${username}_${friendUsername}`;
+    const requestId2 = `${friendUsername}_${username}`;
+    
+    // Remove from friendRequests
+    this.friendRequests.delete(requestId1);
+    this.friendRequests.delete(requestId2);
+    
+    // Remove color preferences
+    const colorId1 = `${username}_${friendUsername}`;
+    const colorId2 = `${friendUsername}_${username}`;
+    
+    this.friendColors.delete(colorId1);
+    this.friendColors.delete(colorId2);
+    
+    return true;
+  }
+  
+  async getFriends(username: string): Promise<Friend[]> {
+    const friends: Friend[] = [];
+    
+    // Check all friend requests where the user is involved
+    // Convert Map to array to avoid Iterator issues in TS
+    const friendRequestEntries = Array.from(this.friendRequests.entries());
+    
+    for (const [requestId, request] of friendRequestEntries) {
+      if (request.status === FriendStatus.ACCEPTED) {
+        if (request.requester === username) {
+          // User is the requester
+          const colorId = `${username}_${request.addressee}`;
+          const colorPref = this.friendColors.get(colorId);
+          
+          friends.push({
+            username: request.addressee,
+            status: FriendStatus.ACCEPTED,
+            color: colorPref?.color || 'rgb(99, 102, 241)'
+          });
+        } else if (request.addressee === username) {
+          // User is the addressee
+          const colorId = `${username}_${request.requester}`;
+          const colorPref = this.friendColors.get(colorId);
+          
+          friends.push({
+            username: request.requester,
+            status: FriendStatus.ACCEPTED,
+            color: colorPref?.color || 'rgb(99, 102, 241)'
+          });
+        }
+      }
+    }
+    
+    return friends;
+  }
+  
+  async getFriendRequests(username: string): Promise<Friend[]> {
+    const requests: Friend[] = [];
+    
+    // Check all friend requests where the user is the addressee
+    // Convert Map to array to avoid Iterator issues in TS
+    const friendRequestEntries = Array.from(this.friendRequests.entries());
+    
+    for (const [requestId, request] of friendRequestEntries) {
+      if (request.status === FriendStatus.PENDING && request.addressee === username) {
+        requests.push({
+          username: request.requester,
+          status: FriendStatus.PENDING
+        });
+      }
+    }
+    
+    return requests;
+  }
+  
+  async updateFriendColor(username: string, friendUsername: string, color: string): Promise<boolean> {
+    // Check if these users are friends
+    const isFriend = await this.areFriends(username, friendUsername);
+    
+    if (!isFriend) {
+      console.error("Users are not friends");
+      return false;
+    }
+    
+    // Update the color preference
+    const colorId = `${username}_${friendUsername}`;
+    
+    this.friendColors.set(colorId, {
+      user: username,
+      friend: friendUsername,
+      color: color
+    });
+    
+    return true;
+  }
+  
+  async getFriendColor(username: string, friendUsername: string): Promise<string | undefined> {
+    const colorId = `${username}_${friendUsername}`;
+    const colorPref = this.friendColors.get(colorId);
+    
+    return colorPref?.color;
+  }
+  
+  private async areFriends(user1: string, user2: string): Promise<boolean> {
+    const requestId1 = `${user1}_${user2}`;
+    const requestId2 = `${user2}_${user1}`;
+    
+    const request1 = this.friendRequests.get(requestId1);
+    const request2 = this.friendRequests.get(requestId2);
+    
+    return (request1?.status === FriendStatus.ACCEPTED) || (request2?.status === FriendStatus.ACCEPTED);
   }
 }
 
