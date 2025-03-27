@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,16 +6,19 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
-import { ChatRoom } from "@shared/schema";
+import { ChatRoom, SiteStatus } from "@shared/schema";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { LockIcon } from "lucide-react";
 
 interface UsernameModalProps {
   isVisible: boolean;
   onSubmit: (username: string, selectedRoom?: ChatRoom) => void;
   takenUsernames: string[];
+  siteStatus?: SiteStatus;
 }
 
-export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameModalProps) {
+export function UsernameModal({ isVisible, onSubmit, takenUsernames, siteStatus }: UsernameModalProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -23,7 +26,33 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom>(ChatRoom.GENERAL);
+  const [localSiteStatus, setLocalSiteStatus] = useState<SiteStatus>({ isOpen: true, message: '' });
   const { toast } = useToast();
+  
+  // Fetch site status if not provided
+  useEffect(() => {
+    if (!isVisible) return;
+    
+    // If site status is provided via props, use it
+    if (siteStatus) {
+      setLocalSiteStatus(siteStatus);
+      return;
+    }
+    
+    // Otherwise fetch from the API
+    const fetchSiteStatus = async () => {
+      try {
+        const response = await apiRequest<SiteStatus>('/api/site-status');
+        setLocalSiteStatus(response);
+      } catch (error) {
+        console.error('Failed to fetch site status:', error);
+        // Default to site open if we can't fetch the status
+        setLocalSiteStatus({ isOpen: true, message: '' });
+      }
+    };
+    
+    fetchSiteStatus();
+  }, [isVisible, siteStatus]);
 
   const validateUsername = (username: string): boolean => {
     const trimmedUsername = username.trim();
@@ -155,6 +184,21 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
           <CardTitle className="text-center">Welcome to The Social Spot</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Site Closed Alert */}
+          {localSiteStatus && !localSiteStatus.isOpen && (
+            <Alert variant="destructive" className="mb-4">
+              <LockIcon className="h-4 w-4" />
+              <AlertTitle>Site is currently closed</AlertTitle>
+              <AlertDescription>
+                <p className="mt-1">{localSiteStatus.message}</p>
+                {localSiteStatus.closedBy && (
+                  <p className="text-xs mt-2">
+                    Closed by {localSiteStatus.closedBy} {localSiteStatus.closedAt && `at ${new Date(localSiteStatus.closedAt).toLocaleString()}`}
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "login" | "register")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
@@ -222,11 +266,14 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
                     type="button" 
                     variant="outline" 
                     onClick={handleGuestLogin}
-                    disabled={isLoading}
+                    disabled={isLoading || !localSiteStatus.isOpen}
                   >
                     Join as Guest
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
+                  <Button 
+                    type="submit" 
+                    disabled={isLoading || !localSiteStatus.isOpen}
+                  >
                     {isLoading ? "Logging in..." : "Login"}
                   </Button>
                 </div>
@@ -310,7 +357,10 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
                   >
                     Back to Login
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
+                  <Button 
+                    type="submit" 
+                    disabled={isLoading || !localSiteStatus.isOpen}
+                  >
                     {isLoading ? "Registering..." : "Register"}
                   </Button>
                 </div>

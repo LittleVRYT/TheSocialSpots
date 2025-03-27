@@ -58,7 +58,9 @@ export function ChatContainer() {
     rejectFriendRequest,
     removeFriend,
     updateFriendColor,
-    privateMessages
+    privateMessages,
+    // Site status
+    siteStatus
   } = useChat();
 
   // Handle username submit
@@ -199,6 +201,7 @@ export function ChatContainer() {
         isVisible={!username} 
         onSubmit={handleUsernameSubmit}
         takenUsernames={users.map(u => u.username)}
+        siteStatus={siteStatus}
       />
       
       {/* Private Message Dialog */}
@@ -443,6 +446,7 @@ export function ChatContainer() {
               visible={true}
               currentUsername={username || ''}
               onClose={toggleSettingsPanel}
+              siteStatus={siteStatus}
             />
           </div>
         )}
