@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Globe, Wifi, Trophy, UserPlus, Settings } from "lucide-react";
 import { ChatRegion, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 
 export function ChatContainer() {
   const [username, setUsername] = useState<string | null>(null);
@@ -70,18 +71,29 @@ export function ChatContainer() {
   };
   
   // Toggle leaderboard visibility
-  const toggleLeaderboard = () => {
-    setIsLeaderboardVisible(!isLeaderboardVisible);
+  const toggleLeaderboard = (e?: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    // If event is provided, prevent default behavior and stop propagation
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    setIsLeaderboardVisible(prev => !prev);
+    
+    // Close other panels if they're open
     if (isUsersVisible) {
       setIsUsersVisible(false);
     }
     if (isFriendPanelVisible) {
       setIsFriendPanelVisible(false);
     }
+    if (isSettingsPanelVisible) {
+      setIsSettingsPanelVisible(false);
+    }
   };
   
   // Toggle friend panel visibility
-  const toggleFriendPanel = (e?: React.MouseEvent) => {
+  const toggleFriendPanel = (e?: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     // If event is provided, prevent default behavior and stop propagation
     if (e) {
       e.preventDefault();
@@ -101,14 +113,19 @@ export function ChatContainer() {
     if (isSettingsPanelVisible) {
       setIsSettingsPanelVisible(false);
     }
-    
-    // Debug log to verify function execution
-    console.log("Friend panel toggled, new state:", !isFriendPanelVisible);
   };
   
   // Toggle settings panel visibility
-  const toggleSettingsPanel = () => {
-    setIsSettingsPanelVisible(!isSettingsPanelVisible);
+  const toggleSettingsPanel = (e?: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    // If event is provided, prevent default behavior and stop propagation
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    setIsSettingsPanelVisible(prev => !prev);
+    
+    // Close other panels if they're open
     if (isLeaderboardVisible) {
       setIsLeaderboardVisible(false);
     }
@@ -196,42 +213,56 @@ export function ChatContainer() {
           
           {/* Leaderboard, Friends & Settings Toggles */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={toggleLeaderboard}
-              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
-                isLeaderboardVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
-              }`}
+            <Button
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleLeaderboard();
+              }}
+              variant={isLeaderboardVisible ? "default" : "outline"}
+              size="sm"
+              aria-pressed={isLeaderboardVisible}
+              aria-label="Toggle Leaderboard"
             >
-              <Trophy className="h-4 w-4" />
+              <Trophy className="h-4 w-4 mr-1" />
               <span className="text-xs font-medium">Leaderboard</span>
-            </button>
+            </Button>
             
-            <button
-              onClick={(e) => toggleFriendPanel(e)}
-              type="button"
-              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
-                isFriendPanelVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
-              } relative cursor-pointer`}
+            <Button
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleFriendPanel();
+              }}
+              variant={isFriendPanelVisible ? "default" : "outline"}
+              size="sm"
+              className="relative"
+              aria-pressed={isFriendPanelVisible}
               aria-label="Toggle Friends Panel"
             >
-              <UserPlus className="h-4 w-4" />
+              <UserPlus className="h-4 w-4 mr-1" />
               <span className="text-xs font-medium">Friends</span>
               {friendRequests.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {friendRequests.length}
                 </span>
               )}
-            </button>
+            </Button>
             
-            <button
-              onClick={toggleSettingsPanel}
-              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
-                isSettingsPanelVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
-              }`}
+            <Button
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSettingsPanel();
+              }}
+              variant={isSettingsPanelVisible ? "default" : "outline"}
+              size="sm"
+              aria-pressed={isSettingsPanelVisible}
+              aria-label="Toggle Settings Panel"
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4 mr-1" />
               <span className="text-xs font-medium">Settings</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -264,31 +295,34 @@ export function ChatContainer() {
         />
         
         {/* Leaderboard Sidebar */}
-        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
-          isLeaderboardVisible ? 'block' : 'hidden'
-        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
-          <div className="p-4 h-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Leaderboard</h2>
-              <button 
-                onClick={toggleLeaderboard}
-                className="p-1 rounded-md text-gray-500 hover:bg-gray-100"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+        {isLeaderboardVisible && (
+          <div className="h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto md:relative absolute right-0 top-0 bottom-0 z-50">
+            <div className="p-4 h-full">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold">Leaderboard</h2>
+                <Button
+                  onClick={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleLeaderboard();
+                  }}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </Button>
+              </div>
+              <Leaderboard visible={true} />
             </div>
-            <Leaderboard visible={isLeaderboardVisible} />
           </div>
-        </div>
+        )}
         
         {/* Friend Panel Sidebar */}
-        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
-          isFriendPanelVisible ? 'block' : 'hidden'
-        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
-          {isFriendPanelVisible && (
+        {isFriendPanelVisible && (
+          <div className="h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto md:relative absolute right-0 top-0 bottom-0 z-50">
             <FriendPanel
               visible={true}
               currentUsername={username || ''}
@@ -302,19 +336,19 @@ export function ChatContainer() {
               onUpdateFriendColor={updateFriendColor}
               onClose={toggleFriendPanel}
             />
-          )}
-        </div>
+          </div>
+        )}
         
         {/* Settings Panel Sidebar */}
-        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
-          isSettingsPanelVisible ? 'block' : 'hidden'
-        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
-          <SettingsPanel
-            visible={isSettingsPanelVisible}
-            currentUsername={username || ''}
-            onClose={toggleSettingsPanel}
-          />
-        </div>
+        {isSettingsPanelVisible && (
+          <div className="h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto md:relative absolute right-0 top-0 bottom-0 z-50">
+            <SettingsPanel
+              visible={true}
+              currentUsername={username || ''}
+              onClose={toggleSettingsPanel}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
