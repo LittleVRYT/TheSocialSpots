@@ -31,6 +31,9 @@ export interface IStorage {
   updateUserLastActive(username: string): Promise<void>;
   getUsersByTimeOnline(limit?: number): Promise<ChatUser[]>;
   
+  // User settings methods
+  updateUserSettings(username: string, settings: { phoneNumber?: string, notifyFriendOnline?: boolean }): Promise<boolean>;
+  
   // Friend system methods
   sendFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
   acceptFriendRequest(requesterUsername: string, addresseeUsername: string): Promise<boolean>;
@@ -76,6 +79,40 @@ export class PgStorage implements IStorage {
     }
   }
   
+  async updateUserSettings(username: string, settings: { phoneNumber?: string, notifyFriendOnline?: boolean }): Promise<boolean> {
+    try {
+      // Update user settings in the users table with default values if undefined
+      await db.update(users)
+        .set({
+          phoneNumber: settings.phoneNumber || '',
+          notifyFriendOnline: settings.notifyFriendOnline ?? false
+        })
+        .where(eq(users.username, username));
+      
+      // Also update chat_users if the user is online
+      const chatUser = await db.select()
+        .from(chatUsers)
+        .where(and(
+          eq(chatUsers.username, username),
+          eq(chatUsers.isActive, true)
+        ));
+      
+      if (chatUser.length > 0) {
+        await db.update(chatUsers)
+          .set({
+            phoneNumber: settings.phoneNumber || '',
+            notifyFriendOnline: settings.notifyFriendOnline ?? false
+          })
+          .where(eq(chatUsers.username, username));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      return false;
+    }
+  }
+  
   async getUsersByTimeOnline(limit: number = 10): Promise<ChatUser[]> {
     try {
       const users = await db.select()
@@ -93,7 +130,9 @@ export class PgStorage implements IStorage {
         avatarInitials: user.avatarInitials || undefined,
         joinTime: user.joinTime ? new Date(user.joinTime) : undefined,
         lastActive: user.lastActive ? new Date(user.lastActive) : undefined,
-        totalTimeOnline: user.totalTimeOnline || 0
+        totalTimeOnline: user.totalTimeOnline || 0,
+        phoneNumber: user.phoneNumber || undefined,
+        notifyFriendOnline: user.notifyFriendOnline || false
       }));
     } catch (error) {
       console.error("Error getting users sorted by time online:", error);
@@ -107,7 +146,9 @@ export class PgStorage implements IStorage {
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
-          password TEXT NOT NULL
+          password TEXT NOT NULL,
+          phone_number TEXT,
+          notify_friend_online BOOLEAN DEFAULT FALSE
         );
         
         CREATE TABLE IF NOT EXISTS chat_users (
@@ -117,7 +158,9 @@ export class PgStorage implements IStorage {
           role TEXT DEFAULT 'user',
           avatar_color TEXT DEFAULT '#6366f1',
           avatar_shape TEXT DEFAULT 'circle',
-          avatar_initials TEXT
+          avatar_initials TEXT,
+          phone_number TEXT,
+          notify_friend_online BOOLEAN DEFAULT FALSE
         );
         
         CREATE TABLE IF NOT EXISTS chat_messages (
@@ -205,6 +248,36 @@ export class PgStorage implements IStorage {
             WHERE table_name = 'chat_users' AND column_name = 'total_time_online'
           ) THEN
             ALTER TABLE chat_users ADD COLUMN total_time_online INTEGER DEFAULT 0;
+          END IF;
+          
+          -- Add notification settings to users table if they don't exist
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'phone_number'
+          ) THEN
+            ALTER TABLE users ADD COLUMN phone_number TEXT;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'notify_friend_online'
+          ) THEN
+            ALTER TABLE users ADD COLUMN notify_friend_online BOOLEAN DEFAULT FALSE;
+          END IF;
+          
+          -- Add notification settings to chat_users table if they don't exist
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_users' AND column_name = 'phone_number'
+          ) THEN
+            ALTER TABLE chat_users ADD COLUMN phone_number TEXT;
+          END IF;
+          
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'chat_users' AND column_name = 'notify_friend_online'
+          ) THEN
+            ALTER TABLE chat_users ADD COLUMN notify_friend_online BOOLEAN DEFAULT FALSE;
           END IF;
         END
         $$;
@@ -347,7 +420,12 @@ export class PgStorage implements IStorage {
         role: user.role as UserRole,
         avatarColor: user.avatarColor || undefined,
         avatarShape: (user.avatarShape as 'circle' | 'square' | 'rounded') || undefined,
-        avatarInitials: user.avatarInitials || undefined
+        avatarInitials: user.avatarInitials || undefined,
+        joinTime: user.joinTime ? new Date(user.joinTime) : undefined,
+        lastActive: user.lastActive ? new Date(user.lastActive) : undefined,
+        totalTimeOnline: user.totalTimeOnline || 0,
+        phoneNumber: user.phoneNumber || undefined,
+        notifyFriendOnline: user.notifyFriendOnline || false
       }));
     } catch (error) {
       console.error("Error getting chat users:", error);
@@ -1154,6 +1232,35 @@ export class MemStorage implements IStorage {
       if (!user.joinTime) {
         user.joinTime = now;
       }
+    }
+  }
+  
+  async updateUserSettings(username: string, settings: { phoneNumber?: string, notifyFriendOnline?: boolean }): Promise<boolean> {
+    try {
+      // Find the user in the users Map
+      const userEntry = Array.from(this.users.entries()).find(([_, user]) => user.username === username);
+      
+      if (userEntry) {
+        const [userId, user] = userEntry;
+        // Update user settings with empty string instead of null
+        user.phoneNumber = settings.phoneNumber || '';
+        user.notifyFriendOnline = settings.notifyFriendOnline ?? false;
+        
+        // Also update chat_users if the user is online
+        const chatUser = Array.from(this.chatUsers.values()).find(u => u.username === username && u.isActive);
+        
+        if (chatUser) {
+          chatUser.phoneNumber = settings.phoneNumber || '';
+          chatUser.notifyFriendOnline = settings.notifyFriendOnline ?? false;
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      return false;
     }
   }
   

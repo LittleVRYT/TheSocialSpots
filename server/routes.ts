@@ -989,25 +989,22 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
         });
       }
       
-      // Update user settings
-      user.phoneNumber = phoneNumber;
-      user.notifyFriendOnline = !!notifyFriendOnline;
-      
-      // Save user back to storage (auto-persist should work)
-      
-      // Update chat user if they are online
-      const allChatUsers = await storage.getChatUsers();
-      const chatUser = allChatUsers.find(u => u.username === username);
-      
-      if (chatUser) {
-        chatUser.phoneNumber = phoneNumber;
-        chatUser.notifyFriendOnline = !!notifyFriendOnline;
-      }
-      
-      // Return success
-      return res.json({
-        message: 'Settings updated successfully'
+      // Use the new updateUserSettings method in storage
+      const success = await storage.updateUserSettings(username, {
+        phoneNumber: phoneNumber || '',
+        notifyFriendOnline: !!notifyFriendOnline
       });
+      
+      if (success) {
+        // Return success
+        return res.json({
+          message: 'Settings updated successfully'
+        });
+      } else {
+        return res.status(500).json({
+          message: 'Failed to update settings'
+        });
+      }
     } catch (error) {
       console.error('Error updating user settings:', error);
       return res.status(500).json({
