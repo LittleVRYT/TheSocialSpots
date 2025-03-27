@@ -6,9 +6,10 @@ import { MessageInput } from "./message-input";
 import { OnlineUsers } from "./online-users";
 import { Leaderboard } from "./leaderboard";
 import { FriendPanel } from "./friend-panel";
+import { SettingsPanel } from "./settings-panel";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Wifi, Trophy, UserPlus } from "lucide-react";
+import { Globe, Wifi, Trophy, UserPlus, Settings } from "lucide-react";
 import { ChatRegion, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -17,6 +18,7 @@ export function ChatContainer() {
   const [isUsersVisible, setIsUsersVisible] = useState(false);
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const [isFriendPanelVisible, setIsFriendPanelVisible] = useState(false);
+  const [isSettingsPanelVisible, setIsSettingsPanelVisible] = useState(false);
   const { toast } = useToast();
   
   const { 
@@ -86,6 +88,23 @@ export function ChatContainer() {
     }
     if (isUsersVisible) {
       setIsUsersVisible(false);
+    }
+    if (isSettingsPanelVisible) {
+      setIsSettingsPanelVisible(false);
+    }
+  };
+  
+  // Toggle settings panel visibility
+  const toggleSettingsPanel = () => {
+    setIsSettingsPanelVisible(!isSettingsPanelVisible);
+    if (isLeaderboardVisible) {
+      setIsLeaderboardVisible(false);
+    }
+    if (isUsersVisible) {
+      setIsUsersVisible(false);
+    }
+    if (isFriendPanelVisible) {
+      setIsFriendPanelVisible(false);
     }
   };
   
@@ -163,7 +182,7 @@ export function ChatContainer() {
             </select>
           </div>
           
-          {/* Leaderboard & Friends Toggles */}
+          {/* Leaderboard, Friends & Settings Toggles */}
           <div className="flex items-center gap-2">
             <button
               onClick={toggleLeaderboard}
@@ -188,6 +207,16 @@ export function ChatContainer() {
                   {friendRequests.length}
                 </span>
               )}
+            </button>
+            
+            <button
+              onClick={toggleSettingsPanel}
+              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
+                isSettingsPanelVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
+              }`}
+            >
+              <Settings className="h-4 w-4" />
+              <span className="text-xs font-medium">Settings</span>
             </button>
           </div>
         </div>
@@ -257,6 +286,17 @@ export function ChatContainer() {
             onRemoveFriend={removeFriend}
             onUpdateFriendColor={updateFriendColor}
             onClose={toggleFriendPanel}
+          />
+        </div>
+        
+        {/* Settings Panel Sidebar */}
+        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
+          isSettingsPanelVisible ? 'block' : 'hidden'
+        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
+          <SettingsPanel
+            visible={isSettingsPanelVisible}
+            currentUsername={username || ''}
+            onClose={toggleSettingsPanel}
           />
         </div>
       </main>

@@ -6,6 +6,7 @@ import { MessageType, type WSMessage, ChatRegion, insertUserSchema, loginSchema,
 import OpenAI from "openai";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import Twilio from "twilio";
 import { containsBannedWords, filterMessage, isUsernameSafe } from "./profanity-filter";
 
 // Helper function to get a readable region name
@@ -19,6 +20,30 @@ function getRegionDisplayName(region: ChatRegion): string {
     case ChatRegion.OCEANIA: return 'Oceania';
     case ChatRegion.GLOBAL:
     default: return 'Global';
+  }
+}
+
+// Helper function to send SMS notifications via Twilio
+async function sendSmsNotification(phoneNumber: string, message: string): Promise<boolean> {
+  try {
+    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
+      console.error("Twilio credentials are missing from environment variables");
+      return false;
+    }
+
+    const twilioClient = Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    });
+    
+    console.log(`SMS notification sent to ${phoneNumber}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to send SMS notification:", error);
+    return false;
   }
 }
 
@@ -100,6 +125,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Send the updated user list to all clients
               const updatedUsers = await storage.getChatUsers();
+              
+              // Check if any friends have SMS notifications enabled and send them
+              try {
+                // Get the list of users who have this user as a friend and notification enabled
+                const friends = await storage.getFriends(message.username);
+                
+                // For each friend, check their notification preferences
+                for (const friend of friends) {
+                  const friendUser = updatedUsers.find(u => u.username === friend.username);
+                  
+                  // If the friend has notification preferences enabled and has a phone number
+                  if (friendUser && friendUser.notifyFriendOnline && friendUser.phoneNumber) {
+                    // Send SMS notification via Twilio
+                    await sendSmsNotification(
+                      friendUser.phoneNumber,
+                      `${message.username} is now online!`
+                    );
+                  }
+                }
+              } catch (error) {
+                console.error("Failed to send SMS notifications:", error);
+              }
               
               // Broadcast user list and join message to all clients
               broadcastToAll({
@@ -889,6 +936,116 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
       res.status(500).json({
         message: 'Error checking username',
         details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // User settings endpoints
+  
+  // Get user settings
+  app.get('/api/user/settings/:username', async (req: Request, res: Response) => {
+    try {
+      const { username } = req.params;
+      
+      // Get user from storage
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(404).json({
+          message: 'User not found'
+        });
+      }
+      
+      // Return settings
+      return res.json({
+        phoneNumber: user.phoneNumber || '',
+        notifyFriendOnline: user.notifyFriendOnline || false
+      });
+    } catch (error) {
+      console.error('Error getting user settings:', error);
+      return res.status(500).json({
+        message: 'Internal server error'
+      });
+    }
+  });
+  
+  // Update user settings
+  app.post('/api/user/settings', async (req: Request, res: Response) => {
+    try {
+      const { username, phoneNumber, notifyFriendOnline } = req.body;
+      
+      if (!username) {
+        return res.status(400).json({
+          message: 'Username is required'
+        });
+      }
+      
+      // Get user from storage
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(404).json({
+          message: 'User not found'
+        });
+      }
+      
+      // Update user settings
+      user.phoneNumber = phoneNumber;
+      user.notifyFriendOnline = !!notifyFriendOnline;
+      
+      // Save user back to storage (auto-persist should work)
+      
+      // Update chat user if they are online
+      const allChatUsers = await storage.getChatUsers();
+      const chatUser = allChatUsers.find(u => u.username === username);
+      
+      if (chatUser) {
+        chatUser.phoneNumber = phoneNumber;
+        chatUser.notifyFriendOnline = !!notifyFriendOnline;
+      }
+      
+      // Return success
+      return res.json({
+        message: 'Settings updated successfully'
+      });
+    } catch (error) {
+      console.error('Error updating user settings:', error);
+      return res.status(500).json({
+        message: 'Internal server error'
+      });
+    }
+  });
+
+  // Test Twilio SMS endpoint (for testing SMS functionality)
+  app.post('/api/user/test-sms', async (req: Request, res: Response) => {
+    try {
+      const { phoneNumber } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({
+          message: 'Phone number is required'
+        });
+      }
+      
+      // Send a test SMS
+      const success = await sendSmsNotification(
+        phoneNumber,
+        'This is a test message from ChatApp!'
+      );
+      
+      if (success) {
+        return res.json({
+          message: 'Test SMS sent successfully'
+        });
+      } else {
+        return res.status(500).json({
+          message: 'Failed to send test SMS'
+        });
+      }
+    } catch (error) {
+      console.error('Error sending test SMS:', error);
+      return res.status(500).json({
+        message: 'Internal server error'
       });
     }
   });

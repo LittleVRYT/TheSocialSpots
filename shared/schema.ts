@@ -14,6 +14,8 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  phoneNumber: text("phone_number"),
+  notifyFriendOnline: boolean("notify_friend_online").default(false),
 });
 
 export const chatUsers = pgTable("chat_users", {
@@ -27,6 +29,8 @@ export const chatUsers = pgTable("chat_users", {
   joinTime: timestamp("join_time").defaultNow(), // When the user first joined
   lastActive: timestamp("last_active").defaultNow(), // Last activity timestamp
   totalTimeOnline: integer("total_time_online").default(0), // Total time in seconds
+  phoneNumber: text("phone_number"), // Phone number for SMS notifications
+  notifyFriendOnline: boolean("notify_friend_online").default(false), // Whether to send SMS notifications when friends come online
 });
 
 export const chatMessages = pgTable("chat_messages", {
@@ -119,6 +123,8 @@ export type ChatUser = {
   joinTime?: Date;
   lastActive?: Date;
   totalTimeOnline?: number; // Total time in seconds
+  phoneNumber?: string; // Phone number for SMS notifications
+  notifyFriendOnline?: boolean; // Whether to send SMS notifications when friends come online
 };
 
 export type ChatMessage = {

@@ -1013,7 +1013,12 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id, 
+      phoneNumber: null, 
+      notifyFriendOnline: false 
+    };
     this.users.set(id, user);
     return user;
   }
@@ -1036,6 +1041,17 @@ export class MemStorage implements IStorage {
     // Generate initials (using first letter of username)
     const avatarInitials = username.charAt(0).toUpperCase();
     
+    // Get phone number and notification preferences from the user account if available
+    let phoneNumber: string | undefined = undefined;
+    let notifyFriendOnline: boolean = false;
+    
+    // Find the user in the database if they are registered
+    const userRecord = await this.getUserByUsername(username);
+    if (userRecord) {
+      phoneNumber = userRecord.phoneNumber || undefined;
+      notifyFriendOnline = userRecord.notifyFriendOnline || false;
+    }
+    
     const newUser: ChatUser = {
       id,
       username,
@@ -1043,7 +1059,9 @@ export class MemStorage implements IStorage {
       role,
       avatarColor: '#6366f1',
       avatarShape: 'circle',
-      avatarInitials
+      avatarInitials,
+      phoneNumber,
+      notifyFriendOnline
     };
     this.chatUsers.set(username, newUser);
     return newUser;
