@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
-import { MessageType, type WSMessage, ChatRegion, FriendStatus, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
+import { MessageType, type WSMessage, ChatRegion, ChatRoom, FriendStatus, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
 import OpenAI from "openai";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -21,6 +21,33 @@ function getRegionDisplayName(region: ChatRegion): string {
     case ChatRegion.GLOBAL:
     default: return 'Global';
   }
+}
+
+// Helper function to get a readable chatroom name
+function getChatRoomDisplayName(chatRoom: ChatRoom): string {
+  switch (chatRoom) {
+    case ChatRoom.CASUAL: return 'Casual Chat';
+    case ChatRoom.TECH: return 'Tech Talk';
+    case ChatRoom.GAMING: return 'Gaming Zone';
+    case ChatRoom.GENERAL:
+    default: return 'General Discussion';
+  }
+}
+
+// Helper function to get the count of users in each chatroom
+function getRoomCounts(clients: Map<WebSocket, { chatRoom: ChatRoom }>): Record<ChatRoom, number> {
+  const counts: Record<ChatRoom, number> = {
+    [ChatRoom.GENERAL]: 0,
+    [ChatRoom.CASUAL]: 0,
+    [ChatRoom.TECH]: 0,
+    [ChatRoom.GAMING]: 0
+  };
+  
+  clients.forEach(client => {
+    counts[client.chatRoom]++;
+  });
+  
+  return counts;
 }
 
 // Helper function to send SMS notifications via Twilio
@@ -70,6 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     username: string;
     chatMode: 'local' | 'global';
     region: ChatRegion;
+    chatRoom: ChatRoom;
     avatarColor?: string;
     avatarShape?: 'circle' | 'square' | 'rounded';
     avatarInitials?: string;
@@ -116,6 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 username: message.username,
                 chatMode: 'global', // Default to global
                 region: ChatRegion.GLOBAL, // Default to global region
+                chatRoom: ChatRoom.GENERAL, // Default chat room
                 avatarColor: '#6366f1', // Default indigo color
                 avatarShape: 'circle', // Default circle shape
                 avatarInitials: message.username.charAt(0).toUpperCase() // First letter of username
@@ -159,10 +188,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.error("Failed to send SMS notifications:", error);
               }
               
-              // Broadcast user list and join message to all clients
+              // Get the room counts
+              const roomCounts = getRoomCounts(clients);
+              
+              // Broadcast user list, room counts, and join message to all clients
               broadcastToAll({
                 type: MessageType.USERS,
                 users: updatedUsers
+              });
+              
+              broadcastToAll({
+                type: MessageType.UPDATE_CHATROOM,
+                roomCounts
               });
               
               broadcastToAll({
@@ -441,6 +478,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 text: `Your region has been updated to ${getRegionDisplayName(message.region as ChatRegion)}`,
                 timestamp: new Date().toISOString()
               }));
+            }
+            break;
+          }
+          
+          // Handle chatroom update
+          case MessageType.UPDATE_CHATROOM: {
+            const client = clients.get(ws);
+            if (client && message.chatRoom && Object.values(ChatRoom).includes(message.chatRoom as ChatRoom)) {
+              // Update client's chatroom
+              client.chatRoom = message.chatRoom as ChatRoom;
+              
+              // Get the counts for each chatroom
+              const roomCounts = getRoomCounts(clients);
+              
+              // Send confirmation to the client
+              ws.send(JSON.stringify({
+                type: MessageType.CHAT,
+                username: 'System',
+                text: `You've joined the ${getChatRoomDisplayName(message.chatRoom as ChatRoom)} room`,
+                timestamp: new Date().toISOString()
+              }));
+              
+              // Broadcast updated room counts to all clients
+              broadcastToAll({
+                type: MessageType.UPDATE_CHATROOM,
+                roomCounts
+              });
             }
             break;
           }
@@ -838,13 +902,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'system'
       );
       
-      // Get updated user list
+      // Get updated user list and room counts
       const updatedUsers = await storage.getChatUsers();
+      const roomCounts = getRoomCounts(clients);
       
       // Broadcast to all remaining clients
       broadcastToAll({
         type: MessageType.USERS,
         users: updatedUsers
+      });
+      
+      broadcastToAll({
+        type: MessageType.UPDATE_CHATROOM,
+        roomCounts
       });
       
       broadcastToAll({

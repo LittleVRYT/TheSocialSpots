@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
+import { ChatRoom } from "@shared/schema";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface UsernameModalProps {
   isVisible: boolean;
-  onSubmit: (username: string) => void;
+  onSubmit: (username: string, selectedRoom?: ChatRoom) => void;
   takenUsernames: string[];
 }
 
@@ -20,6 +22,7 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [selectedRoom, setSelectedRoom] = useState<ChatRoom>(ChatRoom.GENERAL);
   const { toast } = useToast();
 
   const validateUsername = (username: string): boolean => {
@@ -68,7 +71,7 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
       
       setError("");
       setIsLoading(false);
-      onSubmit(username.trim());
+      onSubmit(username.trim(), selectedRoom);
     } catch (error: any) {
       setError(error.message || "Login failed. Please check your credentials.");
       setIsLoading(false);
@@ -138,7 +141,7 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
   // For users who just want to jump in without creating an account
   const handleGuestLogin = () => {
     const guestUsername = `Guest_${Math.floor(Math.random() * 10000)}`;
-    onSubmit(guestUsername);
+    onSubmit(guestUsername, selectedRoom);
   };
 
   if (!isVisible) {
@@ -184,6 +187,32 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
                     className={error ? 'border-red-500' : ''}
                     autoComplete="current-password"
                   />
+                </div>
+                
+                <div>
+                  <Label>Select Chatroom</Label>
+                  <RadioGroup 
+                    value={selectedRoom} 
+                    onValueChange={(value) => setSelectedRoom(value as ChatRoom)}
+                    className="mt-2 grid grid-cols-2 gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.GENERAL} id="general" />
+                      <Label htmlFor="general" className="font-normal">General</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.GAMING} id="gaming" />
+                      <Label htmlFor="gaming" className="font-normal">Gaming</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.TECH} id="technology" />
+                      <Label htmlFor="technology" className="font-normal">Technology</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.CASUAL} id="casual" />
+                      <Label htmlFor="casual" className="font-normal">Casual</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
                 
                 {error && <p className="text-sm text-red-500">{error}</p>}
@@ -242,6 +271,32 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
                     className={error ? 'border-red-500' : ''}
                     autoComplete="new-password"
                   />
+                </div>
+                
+                <div>
+                  <Label>Select Chatroom</Label>
+                  <RadioGroup 
+                    value={selectedRoom} 
+                    onValueChange={(value) => setSelectedRoom(value as ChatRoom)}
+                    className="mt-2 grid grid-cols-2 gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.GENERAL} id="register-general" />
+                      <Label htmlFor="register-general" className="font-normal">General</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.GAMING} id="register-gaming" />
+                      <Label htmlFor="register-gaming" className="font-normal">Gaming</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.TECH} id="register-technology" />
+                      <Label htmlFor="register-technology" className="font-normal">Technology</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={ChatRoom.CASUAL} id="register-casual" />
+                      <Label htmlFor="register-casual" className="font-normal">Casual</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
                 
                 {error && <p className="text-sm text-red-500">{error}</p>}

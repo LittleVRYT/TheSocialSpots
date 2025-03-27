@@ -8,11 +8,12 @@ import { OnlineUsers } from "./online-users";
 import { Leaderboard } from "./leaderboard";
 import { FriendPanel } from "./friend-panel";
 import { SettingsPanel } from "./settings-panel";
+import { ChatroomSelector } from "./chatroom-selector";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
 import { useIdleTimeout } from "@/hooks/use-idle-timeout";
 import { Globe, Wifi, Trophy, UserPlus, Settings } from "lucide-react";
-import { ChatRegion, ChatMessage } from "@shared/schema";
+import { ChatRegion, ChatRoom, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 
@@ -38,6 +39,9 @@ export function ChatContainer() {
     setChatMode,
     region,
     setRegion,
+    chatRoom,
+    setChatRoom,
+    roomCounts,
     addReaction,
     removeReaction,
     // Friend system
@@ -51,9 +55,14 @@ export function ChatContainer() {
   } = useChat();
 
   // Handle username submit
-  const handleUsernameSubmit = (newUsername: string) => {
+  const handleUsernameSubmit = (newUsername: string, selectedRoom?: ChatRoom) => {
     setUsername(newUsername);
     connect(newUsername);
+    
+    // If a room was selected during login, switch to that room
+    if (selectedRoom) {
+      setChatRoom(selectedRoom);
+    }
   };
 
   // Handle logout
@@ -299,6 +308,15 @@ export function ChatContainer() {
       <main className="flex-1 flex overflow-hidden">
         {/* Chat Messages and Input */}
         <div className="flex-1 flex flex-col">
+          {/* Chatroom Selector */}
+          <div className="p-3 border-b">
+            <ChatroomSelector 
+              currentRoom={chatRoom}
+              roomCounts={roomCounts}
+              onRoomChange={setChatRoom}
+            />
+          </div>
+          
           <MessageList 
             messages={messages} 
             currentUsername={username || ''}

@@ -110,6 +110,13 @@ export enum ChatRegion {
   OCEANIA = 'oceania'
 }
 
+export enum ChatRoom {
+  GENERAL = 'general',
+  CASUAL = 'casual',
+  TECH = 'tech',
+  GAMING = 'gaming'
+}
+
 export type ChatUser = {
   id: string;
   username: string;
@@ -117,6 +124,7 @@ export type ChatUser = {
   role?: UserRole;
   chatMode?: 'local' | 'global';
   region?: ChatRegion;
+  chatRoom?: ChatRoom; // Added chatRoom field
   avatarColor?: string;
   avatarShape?: 'circle' | 'square' | 'rounded';
   avatarInitials?: string;
@@ -152,6 +160,7 @@ export enum MessageType {
   ERROR = 'error',
   UPDATE_CHAT_MODE = 'update_chat_mode',
   UPDATE_REGION = 'update_region',
+  UPDATE_CHATROOM = 'update_chatroom',
   UPDATE_AVATAR = 'update_avatar',
   ADD_REACTION = 'add_reaction',     // Add an emoji reaction to a message
   REMOVE_REACTION = 'remove_reaction', // Remove an emoji reaction from a message
@@ -202,6 +211,8 @@ export type WSMessage = {
   }>;
   chatMode?: 'global' | 'local'; // For chat mode updates
   region?: ChatRegion; // For region updates
+  chatRoom?: ChatRoom; // For chatroom updates
+  roomCounts?: Record<ChatRoom, number>; // Count of users in each chatroom
   avatarColor?: string; // For avatar color updates
   avatarShape?: 'circle' | 'square' | 'rounded'; // For avatar shape updates
   avatarInitials?: string; // For avatar initials updates

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion, Friend, FriendStatus } from '@shared/schema';
+import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion, ChatRoom, Friend, FriendStatus } from '@shared/schema';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
+
+// Room counts for displaying users in each room
+type RoomCounts = Record<ChatRoom, number>;
 
 interface UseChatResult {
   users: ChatUser[];
@@ -11,6 +14,8 @@ interface UseChatResult {
   error: string | null;
   chatMode: 'local' | 'global';
   region: ChatRegion;
+  chatRoom: ChatRoom;
+  roomCounts: RoomCounts;
   friends: Friend[];
   friendRequests: Friend[];
   connect: (username: string) => void;
@@ -21,6 +26,7 @@ interface UseChatResult {
   sendPrivateVoiceMessage: (text: string, recipient: string, voiceData: string, voiceDuration: number) => void;
   setChatMode: (mode: 'local' | 'global') => void;
   setRegion: (region: ChatRegion) => void;
+  setChatRoom: (room: ChatRoom) => void;
   updateAvatar: (avatarColor: string, avatarShape: 'circle' | 'square' | 'rounded', avatarInitials: string) => void;
   addReaction: (messageId: string, emoji: string) => void;
   removeReaction: (messageId: string, emoji: string) => void;
@@ -40,6 +46,13 @@ export function useChat(): UseChatResult {
   const [error, setError] = useState<string | null>(null);
   const [chatMode, setChatModeState] = useState<'local' | 'global'>('global');
   const [region, setRegionState] = useState<ChatRegion>(ChatRegion.GLOBAL);
+  const [chatRoom, setChatRoomState] = useState<ChatRoom>(ChatRoom.GENERAL);
+  const [roomCounts, setRoomCounts] = useState<RoomCounts>({
+    [ChatRoom.GENERAL]: 0,
+    [ChatRoom.CASUAL]: 0,
+    [ChatRoom.TECH]: 0,
+    [ChatRoom.GAMING]: 0
+  });
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<Friend[]>([]);
   
@@ -225,6 +238,27 @@ export function useChat(): UseChatResult {
                 id: self.crypto.randomUUID(),
                 username: 'System',
                 text: `Region changed to ${data.region}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+            }
+            break;
+            
+          case MessageType.UPDATE_CHATROOM:
+            // Update room counts if provided
+            if (data.roomCounts) {
+              setRoomCounts(data.roomCounts);
+            }
+            
+            // Update this client's chatroom if specified
+            if (data.chatRoom) {
+              setChatRoomState(data.chatRoom);
+              
+              // Add a system message about chatroom change
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `Chatroom changed to ${data.chatRoom}`,
                 timestamp: new Date(),
                 type: 'system'
               });
@@ -468,6 +502,17 @@ export function useChat(): UseChatResult {
     }
   }, [region]);
   
+  // Set chatroom and send update to server
+  const setChatRoom = useCallback((newChatRoom: ChatRoom) => {
+    if (newChatRoom !== chatRoom && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: MessageType.UPDATE_CHATROOM,
+        chatRoom: newChatRoom
+      }));
+      setChatRoomState(newChatRoom);
+    }
+  }, [chatRoom]);
+  
   // Update avatar and send to server
   const updateAvatar = useCallback((
     avatarColor: string, 
@@ -561,6 +606,8 @@ export function useChat(): UseChatResult {
     error,
     chatMode,
     region,
+    chatRoom,
+    roomCounts,
     friends,
     friendRequests,
     connect,
@@ -571,6 +618,7 @@ export function useChat(): UseChatResult {
     sendPrivateVoiceMessage,
     setChatMode,
     setRegion,
+    setChatRoom,
     updateAvatar,
     addReaction,
     removeReaction,
