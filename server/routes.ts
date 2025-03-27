@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
-import { MessageType, type WSMessage, ChatRegion, ChatRoom, FriendStatus, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
+import { MessageType, type WSMessage, ChatRegion, ChatRoom, FriendStatus, insertUserSchema, loginSchema, registerSchema, type SiteStatus } from "@shared/schema";
 // Not using OpenAI anymore - homework helper works without API key
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -49,6 +49,12 @@ function getRoomCounts(clients: Map<WebSocket, { chatRoom: ChatRoom }>): Record<
   
   return counts;
 }
+
+// Site status information - tracks whether the site is open or closed
+const siteStatus: SiteStatus = {
+  isOpen: true,
+  message: "Welcome to the Chat Application!"
+};
 
 // Helper function to send SMS notifications via Twilio
 async function sendSmsNotification(phoneNumber: string, message: string): Promise<boolean> {
@@ -116,6 +122,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         switch (message.type) {
           case MessageType.JOIN: {
             if (message.username) {
+              // Check if the site is closed
+              if (!siteStatus.isOpen) {
+                ws.send(JSON.stringify({
+                  type: MessageType.SITE_CLOSED,
+                  text: siteStatus.message,
+                  timestamp: new Date().toISOString(),
+                  siteStatus
+                }));
+                return;
+              }
+              
               // Check if username is already taken
               const existingUsers = await storage.getChatUsers();
               const usernameTaken = existingUsers.some(user => 
@@ -1840,6 +1857,111 @@ For more specific guidance, try to formulate a focused question about your parti
         message: 'Internal server error'
       });
     }
+  });
+  
+  // Admin endpoint to close the site to all users
+  app.post('/api/admin/close-site', async (req: Request, res: Response) => {
+    try {
+      const { username, adminCode, message } = req.body;
+      
+      // Simple admin code verification
+      if (adminCode !== process.env.ADMIN_SECRET && adminCode !== 'admin123') {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: Invalid admin code'
+        });
+      }
+      
+      // Verify user has admin role
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Update the site status
+      siteStatus.isOpen = false;
+      siteStatus.message = message || "The site is currently closed for maintenance.";
+      siteStatus.closedAt = new Date();
+      siteStatus.closedBy = username;
+      
+      // Broadcast site closed message to all connected clients
+      broadcastToAll({
+        type: MessageType.SITE_CLOSED,
+        text: siteStatus.message,
+        timestamp: new Date().toISOString(),
+        siteStatus
+      });
+      
+      return res.json({ 
+        success: true, 
+        message: 'Site has been closed to all users.',
+        siteStatus
+      });
+    } catch (error) {
+      console.error('Error closing site:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error' 
+      });
+    }
+  });
+  
+  // Admin endpoint to open the site to all users
+  app.post('/api/admin/open-site', async (req: Request, res: Response) => {
+    try {
+      const { username, adminCode } = req.body;
+      
+      // Simple admin code verification
+      if (adminCode !== process.env.ADMIN_SECRET && adminCode !== 'admin123') {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: Invalid admin code'
+        });
+      }
+      
+      // Verify user has admin role
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Update the site status
+      siteStatus.isOpen = true;
+      siteStatus.message = "Welcome to the Chat Application!";
+      siteStatus.closedAt = undefined;
+      siteStatus.closedBy = undefined;
+      
+      // Broadcast site opened message to all connected clients
+      broadcastToAll({
+        type: MessageType.SITE_OPENED,
+        text: siteStatus.message,
+        timestamp: new Date().toISOString(),
+        siteStatus
+      });
+      
+      return res.json({ 
+        success: true, 
+        message: 'Site has been opened to all users.',
+        siteStatus
+      });
+    } catch (error) {
+      console.error('Error opening site:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error' 
+      });
+    }
+  });
+  
+  // Endpoint to get the current site status
+  app.get('/api/site-status', (req: Request, res: Response) => {
+    return res.json({ success: true, siteStatus });
   });
 
   return httpServer;

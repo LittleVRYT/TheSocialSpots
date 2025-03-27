@@ -11,18 +11,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { PhoneIcon, Bell, X, AlertTriangle, Check } from "lucide-react";
+import { PhoneIcon, Bell, X, AlertTriangle, Check, LockIcon, UnlockIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SiteStatus } from "@shared/schema";
 
 interface SettingsPanelProps {
   visible: boolean;
   currentUsername: string;
   onClose: () => void;
+  siteStatus: SiteStatus;
 }
 
-export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ visible, currentUsername, onClose, siteStatus }: SettingsPanelProps) {
   // User settings
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [notifyFriendOnline, setNotifyFriendOnline] = useState<boolean>(false);
@@ -570,6 +573,212 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
                 >
                   Clear All Database
                 </Button>
+              </div>
+            </div>
+
+            {/* Site Status Controls */}
+            <div className="border-t pt-4 mt-4">
+              <h4 className="text-sm font-semibold mb-2">Site Status Controls</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Control whether the site is accessible to users
+              </p>
+              
+              <div className="mb-4 p-3 border rounded-md flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {siteStatus.isOpen ? (
+                      <UnlockIcon className="h-5 w-5 text-green-500 mr-2" />
+                    ) : (
+                      <LockIcon className="h-5 w-5 text-red-500 mr-2" />
+                    )}
+                    <span className="font-medium">
+                      Site is currently {siteStatus.isOpen ? "OPEN" : "CLOSED"}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {siteStatus.closedAt && !siteStatus.isOpen 
+                      ? `Closed at ${new Date(siteStatus.closedAt).toLocaleString()}` 
+                      : ''}
+                  </span>
+                </div>
+                
+                {!siteStatus.isOpen && (
+                  <div className="mt-1 text-sm">
+                    <p className="font-medium">Closure Message:</p>
+                    <p className="text-sm border p-2 rounded bg-muted">{siteStatus.message}</p>
+                    {siteStatus.closedBy && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Closed by: {siteStatus.closedBy}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                {siteStatus.isOpen ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="closureMessage">Closure Message</Label>
+                      <Textarea
+                        id="closureMessage"
+                        placeholder="Enter a message explaining why the site is closed..."
+                        className="min-h-[80px]"
+                      />
+                    </div>
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      className="w-full"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        
+                        // Get the admin code from the input field
+                        const adminCodeInput = document.getElementById("adminCode") as HTMLInputElement;
+                        const adminCode = adminCodeInput?.value;
+                        
+                        if (!adminCode) {
+                          toast({
+                            title: "Admin Code Required",
+                            description: "Please enter the admin code to proceed",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        
+                        // Get the closure message
+                        const closureMessageInput = document.getElementById("closureMessage") as HTMLTextAreaElement;
+                        const message = closureMessageInput?.value || "The site is temporarily closed for maintenance.";
+                        
+                        // Confirm the action
+                        const confirmed = window.confirm(
+                          "This action will close the site for all users. They will be unable to access the chat until it is reopened. Are you sure you want to proceed?"
+                        );
+                        
+                        if (!confirmed) {
+                          return;
+                        }
+                        
+                        try {
+                          // Call the API to close the site
+                          const response = await apiRequest('/api/admin/close-site', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              username: currentUsername,
+                              adminCode,
+                              message
+                            }),
+                          });
+                          
+                          if (response.success) {
+                            toast({
+                              title: "Site Closed",
+                              description: "The site has been closed for all users.",
+                            });
+                            
+                            // Clear the admin code field and closure message field
+                            if (adminCodeInput) {
+                              adminCodeInput.value = '';
+                            }
+                            if (closureMessageInput) {
+                              closureMessageInput.value = '';
+                            }
+                          } else {
+                            toast({
+                              title: "Operation Failed",
+                              description: response.message || "Failed to close the site",
+                              variant: "destructive",
+                            });
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to close the site:', error);
+                          toast({
+                            title: "Operation Failed",
+                            description: error?.message || "Failed to close the site",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      Close Site
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="w-full"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      
+                      // Get the admin code from the input field
+                      const adminCodeInput = document.getElementById("adminCode") as HTMLInputElement;
+                      const adminCode = adminCodeInput?.value;
+                      
+                      if (!adminCode) {
+                        toast({
+                          title: "Admin Code Required",
+                          description: "Please enter the admin code to proceed",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      
+                      // Confirm the action
+                      const confirmed = window.confirm(
+                        "This action will reopen the site for all users. Are you sure you want to proceed?"
+                      );
+                      
+                      if (!confirmed) {
+                        return;
+                      }
+                      
+                      try {
+                        // Call the API to open the site
+                        const response = await apiRequest('/api/admin/open-site', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({
+                            username: currentUsername,
+                            adminCode
+                          }),
+                        });
+                        
+                        if (response.success) {
+                          toast({
+                            title: "Site Reopened",
+                            description: "The site has been reopened for all users.",
+                          });
+                          
+                          // Clear the admin code field
+                          if (adminCodeInput) {
+                            adminCodeInput.value = '';
+                          }
+                        } else {
+                          toast({
+                            title: "Operation Failed",
+                            description: response.message || "Failed to reopen the site",
+                            variant: "destructive",
+                          });
+                        }
+                      } catch (error: any) {
+                        console.error('Failed to reopen the site:', error);
+                        toast({
+                          title: "Operation Failed",
+                          description: error?.message || "Failed to reopen the site",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    Reopen Site
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>

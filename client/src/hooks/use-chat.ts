@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion, ChatRoom, Friend, FriendStatus } from '@shared/schema';
+import { ChatUser, ChatMessage, MessageType, WSMessage, ChatRegion, ChatRoom, Friend, FriendStatus, SiteStatus } from '@shared/schema';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
 // Room counts for displaying users in each room
 type RoomCounts = Record<ChatRoom, number>;
+
+// Default site status
+const defaultSiteStatus: SiteStatus = {
+  isOpen: true,
+  message: "Welcome to the Chat Application!"
+};
 
 interface UseChatResult {
   users: ChatUser[];
@@ -18,6 +24,7 @@ interface UseChatResult {
   roomCounts: RoomCounts;
   friends: Friend[];
   friendRequests: Friend[];
+  siteStatus: SiteStatus;
   connect: (username: string) => void;
   disconnect: () => void;
   sendMessage: (text: string) => void;
@@ -55,6 +62,7 @@ export function useChat(): UseChatResult {
   });
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<Friend[]>([]);
+  const [siteStatus, setSiteStatus] = useState<SiteStatus>(defaultSiteStatus);
   
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef<string | null>(null);
@@ -373,6 +381,48 @@ export function useChat(): UseChatResult {
               );
             }
             break;
+            
+          // Site status messages
+          case MessageType.SITE_CLOSED:
+            if (data.siteStatus) {
+              setSiteStatus(data.siteStatus);
+              
+              // Add system message
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `The site has been closed: ${data.siteStatus.message}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+              
+              // Disconnect if site is closed
+              if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                setTimeout(() => disconnect(), 2000); // Give user time to see the message
+              }
+            }
+            break;
+            
+          case MessageType.SITE_OPENED:
+            if (data.siteStatus) {
+              setSiteStatus(data.siteStatus);
+              
+              // Add system message
+              addMessage({
+                id: self.crypto.randomUUID(),
+                username: 'System',
+                text: `The site has been reopened: ${data.siteStatus.message}`,
+                timestamp: new Date(),
+                type: 'system'
+              });
+            }
+            break;
+            
+          case MessageType.SITE_STATUS_UPDATE:
+            if (data.siteStatus) {
+              setSiteStatus(data.siteStatus);
+            }
+            break;
         }
       });
       
@@ -610,6 +660,7 @@ export function useChat(): UseChatResult {
     roomCounts,
     friends,
     friendRequests,
+    siteStatus,
     connect,
     disconnect,
     sendMessage,

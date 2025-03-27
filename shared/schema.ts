@@ -174,7 +174,12 @@ export enum MessageType {
   FRIEND_REJECT = 'friend_reject',   // Reject a friend request
   FRIEND_REMOVE = 'friend_remove',   // Remove a friend
   FRIEND_COLOR_UPDATE = 'friend_color_update', // Update a friend's color preference
-  FRIEND_LIST_UPDATE = 'friend_list_update'  // Update the friend list
+  FRIEND_LIST_UPDATE = 'friend_list_update',  // Update the friend list
+  
+  // Site administration message types
+  SITE_STATUS_UPDATE = 'site_status_update', // Update the site status (open/closed)
+  SITE_CLOSED = 'site_closed',       // Site is closed by admin
+  SITE_OPENED = 'site_opened'        // Site is opened by admin
 }
 
 export enum MessageContentType {
@@ -187,6 +192,13 @@ export type Friend = {
   username: string;
   status: FriendStatus;
   color?: string;
+};
+
+export type SiteStatus = {
+  isOpen: boolean;
+  message: string;
+  closedAt?: Date;
+  closedBy?: string;
 };
 
 export type WSMessage = {
@@ -233,4 +245,7 @@ export type WSMessage = {
   friendStatus?: FriendStatus; // Status of the friend relationship
   friendColor?: string; // RGB color for the friend's name
   friends?: Friend[]; // List of friends for a user
+  
+  // Site status fields
+  siteStatus?: SiteStatus; // Current site status information
 };
