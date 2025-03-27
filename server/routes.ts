@@ -434,10 +434,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize OpenAI client
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  // Initialize OpenAI client if API key is available
+  let openai: OpenAI | null = null;
+  try {
+    if (process.env.OPENAI_API_KEY) {
+      openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+    } else {
+      console.log("No OpenAI API key provided. AI homework helper will return fallback responses.");
+    }
+  } catch (error) {
+    console.error("Error initializing OpenAI client:", error);
+  }
 
   // AI Homework Helper endpoint
   app.post('/api/ai-homework-help', async (req: Request, res: Response) => {
