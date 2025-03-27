@@ -320,6 +320,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.PRIVATE_MESSAGE: {
             const client = clients.get(ws);
             if (client && message.text && message.recipient) {
+              // Check if users are friends (private messaging restricted to friends only)
+              const friends = await storage.getFriends(client.username);
+              const isFriend = friends.some(f => 
+                f.username === message.recipient && f.status === FriendStatus.ACCEPTED
+              );
+              
+              if (!isFriend) {
+                // Not friends, send error message
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: `You can only send private messages to your friends. Add ${message.recipient} as a friend first.`,
+                  timestamp: new Date().toISOString()
+                }));
+                break;
+              }
+              
               // Check for banned words
               if (containsBannedWords(message.text)) {
                 // Filter the message
@@ -388,6 +404,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case MessageType.VOICE_MESSAGE_PRIVATE: {
             const client = clients.get(ws);
             if (client && message.text && message.recipient && message.voiceData !== undefined && message.voiceDuration !== undefined) {
+              // Check if users are friends (private messaging restricted to friends only)
+              const friends = await storage.getFriends(client.username);
+              const isFriend = friends.some(f => 
+                f.username === message.recipient && f.status === FriendStatus.ACCEPTED
+              );
+              
+              if (!isFriend) {
+                // Not friends, send error message
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: `You can only send private voice messages to your friends. Add ${message.recipient} as a friend first.`,
+                  timestamp: new Date().toISOString()
+                }));
+                break;
+              }
+              
               // Update user's last active time
               await storage.updateUserLastActive(client.username);
               

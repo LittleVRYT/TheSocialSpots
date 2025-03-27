@@ -9,11 +9,12 @@ import { Leaderboard } from "./leaderboard";
 import { FriendPanel } from "./friend-panel";
 import { SettingsPanel } from "./settings-panel";
 import { ChatroomSelector } from "./chatroom-selector";
+import { PrivateMessageDialog } from "./private-message-dialog";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
 import { useIdleTimeout } from "@/hooks/use-idle-timeout";
 import { Globe, Wifi, Trophy, UserPlus, Settings } from "lucide-react";
-import { ChatRegion, ChatRoom, ChatMessage } from "@shared/schema";
+import { ChatRegion, ChatRoom, ChatMessage, FriendStatus } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,9 @@ export function ChatContainer() {
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const [isFriendPanelVisible, setIsFriendPanelVisible] = useState(false);
   const [isSettingsPanelVisible, setIsSettingsPanelVisible] = useState(false);
+  const [isPrivateMessageDialogOpen, setIsPrivateMessageDialogOpen] = useState(false);
+  const [privateMessageRecipient, setPrivateMessageRecipient] = useState("");
+  const [privateMessageRecipientColor, setPrivateMessageRecipientColor] = useState("");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -32,7 +36,9 @@ export function ChatContainer() {
     connect, 
     disconnect, 
     sendMessage, 
+    sendPrivateMessage,
     sendVoiceMessage,
+    sendPrivateVoiceMessage,
     connectionStatus,
     error,
     chatMode,
@@ -51,7 +57,8 @@ export function ChatContainer() {
     acceptFriendRequest,
     rejectFriendRequest,
     removeFriend,
-    updateFriendColor
+    updateFriendColor,
+    privateMessages
   } = useChat();
 
   // Handle username submit
@@ -192,6 +199,24 @@ export function ChatContainer() {
         isVisible={!username} 
         onSubmit={handleUsernameSubmit}
         takenUsernames={users.map(u => u.username)}
+      />
+      
+      {/* Private Message Dialog */}
+      <PrivateMessageDialog
+        isOpen={isPrivateMessageDialogOpen}
+        recipient={privateMessageRecipient}
+        recipientColor={privateMessageRecipientColor}
+        onSend={(message) => {
+          if (message.trim()) {
+            sendPrivateMessage(message.trim(), privateMessageRecipient);
+            toast({
+              title: "Private Message Sent",
+              description: `Message sent to ${privateMessageRecipient}`,
+              variant: "default"
+            });
+          }
+        }}
+        onClose={() => setIsPrivateMessageDialogOpen(false)}
       />
       
       {/* Header */}
@@ -337,6 +362,32 @@ export function ChatContainer() {
           users={users} 
           currentUsername={username || ''} 
           visible={isUsersVisible}
+          friends={friends}
+          onSendPrivateMessage={(recipient) => {
+            // Find if this user is actually a friend
+            const isFriend = friends.some(f => 
+              f.username === recipient && f.status === FriendStatus.ACCEPTED
+            );
+            
+            if (!isFriend) {
+              toast({
+                title: "Cannot send private message",
+                description: "You can only send private messages to your friends",
+                variant: "destructive"
+              });
+              return;
+            }
+            
+            // Get friend color if available
+            const friendColor = friends.find(f => 
+              f.username === recipient && f.status === FriendStatus.ACCEPTED
+            )?.color;
+            
+            // Open the private message dialog
+            setPrivateMessageRecipient(recipient);
+            setPrivateMessageRecipientColor(friendColor || "");
+            setIsPrivateMessageDialogOpen(true);
+          }}
           onToggleVisibility={toggleUsersSidebar}
         />
         
