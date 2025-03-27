@@ -81,8 +81,17 @@ export function ChatContainer() {
   };
   
   // Toggle friend panel visibility
-  const toggleFriendPanel = () => {
-    setIsFriendPanelVisible(!isFriendPanelVisible);
+  const toggleFriendPanel = (e?: React.MouseEvent) => {
+    // If event is provided, prevent default behavior and stop propagation
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Toggle the panel visibility
+    setIsFriendPanelVisible(prev => !prev);
+    
+    // Close other panels if they're open
     if (isLeaderboardVisible) {
       setIsLeaderboardVisible(false);
     }
@@ -92,6 +101,9 @@ export function ChatContainer() {
     if (isSettingsPanelVisible) {
       setIsSettingsPanelVisible(false);
     }
+    
+    // Debug log to verify function execution
+    console.log("Friend panel toggled, new state:", !isFriendPanelVisible);
   };
   
   // Toggle settings panel visibility
@@ -195,10 +207,12 @@ export function ChatContainer() {
             </button>
             
             <button
-              onClick={toggleFriendPanel}
+              onClick={(e) => toggleFriendPanel(e)}
+              type="button"
               className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
                 isFriendPanelVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
-              } relative`}
+              } relative cursor-pointer`}
+              aria-label="Toggle Friends Panel"
             >
               <UserPlus className="h-4 w-4" />
               <span className="text-xs font-medium">Friends</span>
@@ -274,19 +288,21 @@ export function ChatContainer() {
         <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
           isFriendPanelVisible ? 'block' : 'hidden'
         } md:relative absolute right-0 top-0 bottom-0 z-50`}>
-          <FriendPanel
-            visible={isFriendPanelVisible}
-            currentUsername={username || ''}
-            allUsers={users}
-            friends={friends}
-            friendRequests={friendRequests}
-            onSendFriendRequest={sendFriendRequest}
-            onAcceptFriendRequest={acceptFriendRequest}
-            onRejectFriendRequest={rejectFriendRequest}
-            onRemoveFriend={removeFriend}
-            onUpdateFriendColor={updateFriendColor}
-            onClose={toggleFriendPanel}
-          />
+          {isFriendPanelVisible && (
+            <FriendPanel
+              visible={true}
+              currentUsername={username || ''}
+              allUsers={users}
+              friends={friends}
+              friendRequests={friendRequests}
+              onSendFriendRequest={sendFriendRequest}
+              onAcceptFriendRequest={acceptFriendRequest}
+              onRejectFriendRequest={rejectFriendRequest}
+              onRemoveFriend={removeFriend}
+              onUpdateFriendColor={updateFriendColor}
+              onClose={toggleFriendPanel}
+            />
+          )}
         </div>
         
         {/* Settings Panel Sidebar */}

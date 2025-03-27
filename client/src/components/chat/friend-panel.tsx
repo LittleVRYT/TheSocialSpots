@@ -71,18 +71,26 @@ export function FriendPanel({
     }
   };
   
-  if (!visible) {
-    return null;
-  }
+  // We're no longer returning null based on visibility since parent component handles that
   
   return (
-    <div className="w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 absolute right-2 top-14 z-10">
+    <div className="w-full h-full flex flex-col p-4">
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-lg font-semibold flex items-center">
           <Users className="w-5 h-5 mr-2" />
           Friends
         </h3>
-        <Button variant="ghost" size="sm" onClick={onClose}>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+            console.log("Close button clicked");
+          }}
+          type="button"
+        >
           <X className="h-4 w-4" />
         </Button>
       </div>
