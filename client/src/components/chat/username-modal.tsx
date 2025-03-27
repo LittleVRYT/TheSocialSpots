@@ -149,7 +149,7 @@ export function UsernameModal({ isVisible, onSubmit, takenUsernames }: UsernameM
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <Card className="w-full max-w-md mx-4">
         <CardHeader>
-          <CardTitle className="text-center">Welcome to Chat App</CardTitle>
+          <CardTitle className="text-center">Welcome to The Social Spot</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "login" | "register")}>
