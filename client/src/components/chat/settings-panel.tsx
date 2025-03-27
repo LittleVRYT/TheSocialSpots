@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { PhoneIcon, Bell, X } from "lucide-react";
+import { PhoneIcon, Bell, X, AlertTriangle, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SettingsPanelProps {
   visible: boolean;
@@ -27,6 +28,7 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
   const [notifyFriendOnline, setNotifyFriendOnline] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [testingSMS, setTestingSMS] = useState<boolean>(false);
+  const [twilioConfigured, setTwilioConfigured] = useState<boolean>(true); // Assume configured until we know otherwise
 
   // Load user settings when component mounts
   useEffect(() => {
@@ -39,6 +41,31 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
   const loadUserSettings = async () => {
     try {
       setIsLoading(true);
+      
+      // Check Twilio configuration by making a simple request
+      try {
+        // We're not actually sending anything, just checking configuration
+        const testResponse = await apiRequest<{ 
+          success: boolean; 
+          twilioConfigured?: boolean 
+        }>('/api/user/test-sms', {
+          method: 'POST',
+          body: JSON.stringify({
+            phoneNumber: '+12345678900', // Sample number that won't actually be used
+          }),
+        });
+        
+        // Update Twilio configuration status
+        setTwilioConfigured(testResponse.twilioConfigured !== false);
+      } catch (error: any) {
+        // If we get a 503 status, it means Twilio isn't configured
+        if (error?.status === 503) {
+          setTwilioConfigured(false);
+        }
+        // Other errors we ignore for this test
+      }
+      
+      // Load user settings
       const response = await apiRequest<{
         phoneNumber?: string;
         notifyFriendOnline?: boolean;
@@ -115,17 +142,26 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
       }
       
       // Send test SMS request
-      const response = await apiRequest<{ success: boolean }>('/api/user/test-sms', {
+      const response = await apiRequest<{ success: boolean; twilioConfigured?: boolean }>('/api/user/test-sms', {
         method: 'POST',
         body: JSON.stringify({
           phoneNumber,
         }),
       });
       
+      // Update Twilio configuration status
+      setTwilioConfigured(response.twilioConfigured !== false);
+      
       if (response.success) {
         toast({
           title: "Test SMS Sent",
           description: "A test SMS notification has been sent to your phone number",
+        });
+      } else if (response.twilioConfigured === false) {
+        toast({
+          title: "Twilio Not Configured",
+          description: "SMS notifications are not available because Twilio has not been configured on the server.",
+          variant: "destructive",
         });
       } else {
         toast({
@@ -167,12 +203,112 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
       </div>
       
       <div className="space-y-6 flex-1 overflow-auto pb-4">
+        {/* Twilio Configuration Warning */}
+        {!twilioConfigured && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Twilio Not Configured</AlertTitle>
+            <AlertDescription className="flex flex-col gap-2">
+              <p>
+                SMS notifications are currently unavailable because Twilio has not been configured on the server.
+                The following environment variables are required for SMS functionality:
+              </p>
+              <ul className="list-disc pl-5 text-sm">
+                <li>TWILIO_ACCOUNT_SID</li>
+                <li>TWILIO_AUTH_TOKEN</li>
+                <li>TWILIO_PHONE_NUMBER</li>
+              </ul>
+              <div className="flex gap-2 mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => {
+                    // Ask for Twilio credentials
+                    toast({
+                      title: "Configure Twilio",
+                      description: "Redirecting to configure Twilio credentials...",
+                    });
+                    
+                    // We'll ask for the required Twilio secrets
+                    // This will open a prompt for the user to enter these values
+                    window.parent.postMessage({ type: "ask_secrets", secrets: [
+                      "TWILIO_ACCOUNT_SID",
+                      "TWILIO_AUTH_TOKEN",
+                      "TWILIO_PHONE_NUMBER"
+                    ]}, "*");
+                  }}
+                >
+                  Configure Twilio
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  className="flex-initial"
+                  onClick={async () => {
+                    toast({
+                      title: "Checking Configuration",
+                      description: "Verifying Twilio configuration status...",
+                    });
+                    
+                    try {
+                      // Check Twilio configuration through a test request
+                      const testResponse = await apiRequest<{ 
+                        success: boolean; 
+                        twilioConfigured?: boolean 
+                      }>('/api/user/test-sms', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          phoneNumber: '+12345678900', // Sample number that won't actually be used
+                        }),
+                      });
+                      
+                      // Update Twilio configuration status
+                      const configured = testResponse.twilioConfigured !== false;
+                      setTwilioConfigured(configured);
+                      
+                      // Show configuration status
+                      toast({
+                        title: configured ? "Twilio Configured" : "Twilio Not Configured",
+                        description: configured 
+                          ? "Twilio is properly configured. SMS notifications are available."
+                          : "Twilio is still not properly configured. Check your credentials.",
+                        variant: configured ? "default" : "destructive",
+                      });
+                      
+                      // If configured, reload the settings panel to refresh UI
+                      if (configured) {
+                        await loadUserSettings();
+                      }
+                      
+                    } catch (error) {
+                      console.error('Failed to check Twilio configuration:', error);
+                      toast({
+                        title: "Error",
+                        description: "Failed to check Twilio configuration status.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Refresh Status
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        
         {/* Notification Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5" />
               <span>Notification Settings</span>
+              {twilioConfigured && (
+                <span className="ml-2 flex items-center text-xs font-normal text-green-600">
+                  <Check className="h-3 w-3 mr-1" /> Twilio Configured
+                </span>
+              )}
             </CardTitle>
             <CardDescription>
               Configure how you want to be notified about activities
@@ -214,14 +350,21 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
               />
             </div>
           </CardContent>
-          <CardFooter className="flex justify-between">
-            <Button 
-              variant="outline" 
-              onClick={testSMSNotification}
-              disabled={!phoneNumber || testingSMS || isLoading}
-            >
-              {testingSMS ? "Sending..." : "Test SMS"}
-            </Button>
+          <CardFooter className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={testSMSNotification}
+                disabled={!phoneNumber || testingSMS || isLoading || !twilioConfigured}
+              >
+                {testingSMS ? "Sending..." : "Test SMS"}
+              </Button>
+              {!twilioConfigured && (
+                <span className="text-xs text-muted-foreground">
+                  Twilio required
+                </span>
+              )}
+            </div>
             <Button 
               onClick={saveSettings}
               disabled={isLoading}

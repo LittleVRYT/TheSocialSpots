@@ -1023,7 +1023,21 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
       
       if (!phoneNumber) {
         return res.status(400).json({
+          success: false,
           message: 'Phone number is required'
+        });
+      }
+      
+      // Check if Twilio is configured
+      const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && 
+                               process.env.TWILIO_AUTH_TOKEN && 
+                               process.env.TWILIO_PHONE_NUMBER);
+      
+      if (!twilioConfigured) {
+        return res.status(503).json({
+          success: false,
+          twilioConfigured: false,
+          message: 'Twilio is not configured on the server'
         });
       }
       
@@ -1035,16 +1049,21 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
       
       if (success) {
         return res.json({
+          success: true,
+          twilioConfigured: true,
           message: 'Test SMS sent successfully'
         });
       } else {
         return res.status(500).json({
+          success: false,
+          twilioConfigured: true,
           message: 'Failed to send test SMS'
         });
       }
     } catch (error) {
       console.error('Error sending test SMS:', error);
       return res.status(500).json({
+        success: false,
         message: 'Internal server error'
       });
     }
