@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
-import { MessageType, type WSMessage, ChatRegion, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
+import { MessageType, type WSMessage, ChatRegion, FriendStatus, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
 import OpenAI from "openai";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -535,6 +535,272 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 ws.send(JSON.stringify({
                   type: MessageType.ERROR,
                   text: 'Failed to remove reaction',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+
+          // Handle friend request
+          case MessageType.FRIEND_REQUEST: {
+            const client = clients.get(ws);
+            if (client && client.username && message.friendUsername) {
+              try {
+                // Send friend request
+                const success = await storage.sendFriendRequest(
+                  client.username,
+                  message.friendUsername
+                );
+                
+                if (success) {
+                  // Get the updated friend lists
+                  const senderFriends = await storage.getFriends(client.username);
+                  const receiverFriends = await storage.getFriends(message.friendUsername);
+                  const receiverRequests = await storage.getFriendRequests(message.friendUsername);
+                  
+                  // Send updated friend lists to both users
+                  // To the sender
+                  ws.send(JSON.stringify({
+                    type: MessageType.FRIEND_LIST_UPDATE,
+                    friends: senderFriends
+                  }));
+                  
+                  // To the recipient - find their connection
+                  wss.clients.forEach((clientWs) => {
+                    if (clientWs.readyState === WebSocket.OPEN) {
+                      const clientInfo = clients.get(clientWs as WebSocket);
+                      if (clientInfo && clientInfo.username === message.friendUsername) {
+                        clientWs.send(JSON.stringify({
+                          type: MessageType.FRIEND_REQUEST,
+                          friendUsername: client.username,
+                          friendStatus: FriendStatus.PENDING,
+                          friends: receiverRequests
+                        }));
+                      }
+                    }
+                  });
+                } else {
+                  // Send error if the request failed
+                  ws.send(JSON.stringify({
+                    type: MessageType.ERROR,
+                    text: 'Friend request failed. The user might already be your friend or have a pending request.',
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+              } catch (error) {
+                console.error('Error sending friend request:', error);
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to send friend request',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          // Handle friend request acceptance
+          case MessageType.FRIEND_ACCEPT: {
+            const client = clients.get(ws);
+            if (client && client.username && message.friendUsername) {
+              try {
+                // Accept the friend request
+                const success = await storage.acceptFriendRequest(
+                  message.friendUsername, // The requester's username
+                  client.username // The accepter's username (current user)
+                );
+                
+                if (success) {
+                  // Get updated friend lists
+                  const accepterFriends = await storage.getFriends(client.username);
+                  const requesterFriends = await storage.getFriends(message.friendUsername);
+                  
+                  // Send updated friend lists to both users
+                  // To the accepter (current user)
+                  ws.send(JSON.stringify({
+                    type: MessageType.FRIEND_LIST_UPDATE,
+                    friends: accepterFriends
+                  }));
+                  
+                  // To the requester - find their connection
+                  wss.clients.forEach((clientWs) => {
+                    if (clientWs.readyState === WebSocket.OPEN) {
+                      const clientInfo = clients.get(clientWs as WebSocket);
+                      if (clientInfo && clientInfo.username === message.friendUsername) {
+                        clientWs.send(JSON.stringify({
+                          type: MessageType.FRIEND_ACCEPT,
+                          friendUsername: client.username,
+                          friendStatus: FriendStatus.ACCEPTED,
+                          friends: requesterFriends
+                        }));
+                      }
+                    }
+                  });
+                } else {
+                  // Send error if the acceptance failed
+                  ws.send(JSON.stringify({
+                    type: MessageType.ERROR,
+                    text: 'Failed to accept friend request. It may have been cancelled or already accepted.',
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+              } catch (error) {
+                console.error('Error accepting friend request:', error);
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to accept friend request',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          // Handle friend request rejection
+          case MessageType.FRIEND_REJECT: {
+            const client = clients.get(ws);
+            if (client && client.username && message.friendUsername) {
+              try {
+                // Reject the friend request
+                const success = await storage.rejectFriendRequest(
+                  message.friendUsername, // The requester's username
+                  client.username // The rejecter's username (current user)
+                );
+                
+                if (success) {
+                  // Get updated friend lists for the rejecter
+                  const rejecterRequests = await storage.getFriendRequests(client.username);
+                  
+                  // Send updated friend lists to the rejecter (current user)
+                  ws.send(JSON.stringify({
+                    type: MessageType.FRIEND_LIST_UPDATE,
+                    friends: rejecterRequests
+                  }));
+                  
+                  // Notify the requester that their request was rejected
+                  wss.clients.forEach((clientWs) => {
+                    if (clientWs.readyState === WebSocket.OPEN) {
+                      const clientInfo = clients.get(clientWs as WebSocket);
+                      if (clientInfo && clientInfo.username === message.friendUsername) {
+                        clientWs.send(JSON.stringify({
+                          type: MessageType.FRIEND_REJECT,
+                          friendUsername: client.username,
+                          friendStatus: FriendStatus.REJECTED
+                        }));
+                      }
+                    }
+                  });
+                } else {
+                  // Send error if the rejection failed
+                  ws.send(JSON.stringify({
+                    type: MessageType.ERROR,
+                    text: 'Failed to reject friend request. It may have already been cancelled.',
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+              } catch (error) {
+                console.error('Error rejecting friend request:', error);
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to reject friend request',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          // Handle friend removal
+          case MessageType.FRIEND_REMOVE: {
+            const client = clients.get(ws);
+            if (client && client.username && message.friendUsername) {
+              try {
+                // Remove the friend
+                const success = await storage.removeFriend(
+                  client.username,
+                  message.friendUsername
+                );
+                
+                if (success) {
+                  // Get updated friend lists
+                  const removerFriends = await storage.getFriends(client.username);
+                  const removedFriends = await storage.getFriends(message.friendUsername);
+                  
+                  // Send updated friend lists to both users
+                  // To the remover (current user)
+                  ws.send(JSON.stringify({
+                    type: MessageType.FRIEND_LIST_UPDATE,
+                    friends: removerFriends
+                  }));
+                  
+                  // To the removed friend - find their connection
+                  wss.clients.forEach((clientWs) => {
+                    if (clientWs.readyState === WebSocket.OPEN) {
+                      const clientInfo = clients.get(clientWs as WebSocket);
+                      if (clientInfo && clientInfo.username === message.friendUsername) {
+                        clientWs.send(JSON.stringify({
+                          type: MessageType.FRIEND_REMOVE,
+                          friendUsername: client.username,
+                          friends: removedFriends
+                        }));
+                      }
+                    }
+                  });
+                } else {
+                  // Send error if the removal failed
+                  ws.send(JSON.stringify({
+                    type: MessageType.ERROR,
+                    text: 'Failed to remove friend. You may not be friends with this user.',
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+              } catch (error) {
+                console.error('Error removing friend:', error);
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to remove friend',
+                  timestamp: new Date().toISOString()
+                }));
+              }
+            }
+            break;
+          }
+          
+          // Handle friend color updates
+          case MessageType.FRIEND_COLOR_UPDATE: {
+            const client = clients.get(ws);
+            if (client && client.username && message.friendUsername && message.friendColor) {
+              try {
+                // Update the friend's color
+                const success = await storage.updateFriendColor(
+                  client.username,
+                  message.friendUsername,
+                  message.friendColor
+                );
+                
+                if (success) {
+                  // Get updated friends with color
+                  const updatedFriends = await storage.getFriends(client.username);
+                  
+                  // Send updated friend list to the user
+                  ws.send(JSON.stringify({
+                    type: MessageType.FRIEND_LIST_UPDATE,
+                    friends: updatedFriends
+                  }));
+                } else {
+                  // Send error if the color update failed
+                  ws.send(JSON.stringify({
+                    type: MessageType.ERROR,
+                    text: 'Failed to update friend color. You may not be friends with this user.',
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+              } catch (error) {
+                console.error('Error updating friend color:', error);
+                ws.send(JSON.stringify({
+                  type: MessageType.ERROR,
+                  text: 'Failed to update friend color',
                   timestamp: new Date().toISOString()
                 }));
               }
