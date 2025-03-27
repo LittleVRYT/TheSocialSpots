@@ -49,6 +49,7 @@ export interface IStorage {
   
   // Database administration
   clearDatabase(): Promise<void>;
+  clearChatMessages(): Promise<void>;
 }
 
 export class PgStorage implements IStorage {
@@ -318,6 +319,19 @@ export class PgStorage implements IStorage {
       console.log("Database cleared successfully");
     } catch (error) {
       console.error("Error clearing database:", error);
+      throw error;
+    }
+  }
+  
+  // Method to clear just chat messages, preserving users and other data
+  async clearChatMessages(): Promise<void> {
+    try {
+      // Only truncate the chat_messages table
+      await pool.query(`TRUNCATE chat_messages;`);
+      
+      console.log("Chat messages cleared successfully");
+    } catch (error) {
+      console.error("Error clearing chat messages:", error);
       throw error;
     }
   }
@@ -1128,6 +1142,17 @@ export class MemStorage implements IStorage {
       console.log("In-memory database cleared successfully");
     } catch (error) {
       console.error("Error clearing in-memory database:", error);
+      throw error;
+    }
+  }
+  
+  async clearChatMessages(): Promise<void> {
+    try {
+      // Only clear chat messages, preserving users and other data
+      this.messages = [];
+      console.log("Chat messages cleared successfully");
+    } catch (error) {
+      console.error("Error clearing chat messages:", error);
       throw error;
     }
   }

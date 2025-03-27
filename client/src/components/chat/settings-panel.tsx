@@ -421,82 +421,156 @@ export function SettingsPanel({ visible, currentUsername, onClose }: SettingsPan
                 Warning: These operations are destructive and cannot be undone
               </p>
               
-              <Button 
-                variant="destructive" 
-                size="sm"
-                className="w-full"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  
-                  // Get the admin code from the input field
-                  const adminCodeInput = document.getElementById("adminCode") as HTMLInputElement;
-                  const adminCode = adminCodeInput?.value;
-                  
-                  if (!adminCode) {
-                    toast({
-                      title: "Admin Code Required",
-                      description: "Please enter the admin code to proceed",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  
-                  // Confirm the destructive action
-                  const confirmed = window.confirm(
-                    "WARNING: This action will delete ALL data from the database, including users, messages, and friendships. This action CANNOT be undone. Are you absolutely sure you want to proceed?"
-                  );
-                  
-                  if (!confirmed) {
-                    return;
-                  }
-                  
-                  try {
-                    // Call the API to clear the database
-                    const response = await apiRequest('/api/admin/clear-database', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({
-                        username: currentUsername,
-                        adminCode,
-                      }),
-                    });
+              <div className="flex flex-col gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={async (e) => {
+                    e.preventDefault();
                     
-                    if (response.success) {
+                    // Get the admin code from the input field
+                    const adminCodeInput = document.getElementById("adminCode") as HTMLInputElement;
+                    const adminCode = adminCodeInput?.value;
+                    
+                    if (!adminCode) {
                       toast({
-                        title: "Database Cleared",
-                        description: "The database has been successfully cleared. You will be redirected to the login page.",
+                        title: "Admin Code Required",
+                        description: "Please enter the admin code to proceed",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    // Confirm the action
+                    const confirmed = window.confirm(
+                      "This action will delete all chat messages but keep users, friendships, and user settings. Are you sure you want to proceed?"
+                    );
+                    
+                    if (!confirmed) {
+                      return;
+                    }
+                    
+                    try {
+                      // Call the API to clear chat messages
+                      const response = await apiRequest('/api/admin/clear-chat-messages', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          username: currentUsername,
+                          adminCode,
+                        }),
                       });
                       
-                      // Clear the admin code field
-                      if (adminCodeInput) {
-                        adminCodeInput.value = '';
+                      if (response.success) {
+                        toast({
+                          title: "Chat Messages Cleared",
+                          description: "All chat messages have been successfully cleared.",
+                        });
+                        
+                        // Clear the admin code field
+                        if (adminCodeInput) {
+                          adminCodeInput.value = '';
+                        }
+                      } else {
+                        toast({
+                          title: "Operation Failed",
+                          description: response.message || "Failed to clear chat messages",
+                          variant: "destructive",
+                        });
                       }
-                      
-                      // Redirect to refresh the application after a short delay
-                      setTimeout(() => {
-                        window.location.href = '/';
-                      }, 2000);
-                    } else {
+                    } catch (error: any) {
+                      console.error('Failed to clear chat messages:', error);
                       toast({
                         title: "Operation Failed",
-                        description: response.message || "Failed to clear database",
+                        description: error?.message || "Failed to clear chat messages",
                         variant: "destructive",
                       });
                     }
-                  } catch (error: any) {
-                    console.error('Failed to clear database:', error);
-                    toast({
-                      title: "Operation Failed",
-                      description: error?.message || "Failed to clear database",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                Clear Database
-              </Button>
+                  }}
+                >
+                  Clear Chat Messages
+                </Button>
+                
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  className="w-full"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    
+                    // Get the admin code from the input field
+                    const adminCodeInput = document.getElementById("adminCode") as HTMLInputElement;
+                    const adminCode = adminCodeInput?.value;
+                    
+                    if (!adminCode) {
+                      toast({
+                        title: "Admin Code Required",
+                        description: "Please enter the admin code to proceed",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    // Confirm the destructive action
+                    const confirmed = window.confirm(
+                      "WARNING: This action will delete ALL data from the database, including users, messages, and friendships. This action CANNOT be undone. Are you absolutely sure you want to proceed?"
+                    );
+                    
+                    if (!confirmed) {
+                      return;
+                    }
+                    
+                    try {
+                      // Call the API to clear the database
+                      const response = await apiRequest('/api/admin/clear-database', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          username: currentUsername,
+                          adminCode,
+                        }),
+                      });
+                      
+                      if (response.success) {
+                        toast({
+                          title: "Database Cleared",
+                          description: "The database has been successfully cleared. You will be redirected to the login page.",
+                        });
+                        
+                        // Clear the admin code field
+                        if (adminCodeInput) {
+                          adminCodeInput.value = '';
+                        }
+                        
+                        // Redirect to refresh the application after a short delay
+                        setTimeout(() => {
+                          window.location.href = '/';
+                        }, 2000);
+                      } else {
+                        toast({
+                          title: "Operation Failed",
+                          description: response.message || "Failed to clear database",
+                          variant: "destructive",
+                        });
+                      }
+                    } catch (error: any) {
+                      console.error('Failed to clear database:', error);
+                      toast({
+                        title: "Operation Failed",
+                        description: error?.message || "Failed to clear database",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Clear All Database
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

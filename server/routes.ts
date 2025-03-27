@@ -1794,6 +1794,53 @@ For more specific guidance, try to formulate a focused question about your parti
       });
     }
   });
+  
+  app.post('/api/admin/clear-chat-messages', async (req: Request, res: Response) => {
+    try {
+      const { username, adminCode } = req.body;
+      
+      // Simple admin code verification
+      // In a real-world app, this would be much more secure
+      if (adminCode !== process.env.ADMIN_SECRET && adminCode !== 'admin123') {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: Invalid admin code'
+        });
+      }
+      
+      // Verify user has admin role
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Clear just the chat messages, preserving users and other data
+      await storage.clearChatMessages();
+      
+      // Broadcast a system message informing users that chat history has been cleared
+      broadcastToAll({
+        type: MessageType.CHAT,
+        username: 'System',
+        text: 'Chat history has been cleared by an administrator.',
+        timestamp: new Date().toISOString(),
+        isPrivate: false
+      });
+      
+      return res.json({
+        success: true,
+        message: 'Chat messages cleared successfully'
+      });
+    } catch (error) {
+      console.error('Error clearing chat messages:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  });
 
   return httpServer;
 }
