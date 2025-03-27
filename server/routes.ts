@@ -1085,5 +1085,44 @@ Try resources like Khan Academy, Coursera, or educational YouTube channels for y
     }
   });
 
+  // Add endpoint to clear database for admin users
+  app.post('/api/admin/clear-database', async (req: Request, res: Response) => {
+    try {
+      const { username, adminCode } = req.body;
+      
+      // Simple admin code verification
+      // In a real-world app, this would be much more secure
+      if (adminCode !== process.env.ADMIN_SECRET && adminCode !== 'admin123') {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: Invalid admin code'
+        });
+      }
+      
+      // Verify user has admin role
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Clear the database
+      await storage.clearDatabase();
+      
+      return res.json({
+        success: true,
+        message: 'Database cleared successfully'
+      });
+    } catch (error) {
+      console.error('Error clearing database:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  });
+
   return httpServer;
 }

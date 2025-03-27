@@ -46,6 +46,9 @@ export interface IStorage {
   
   // Database initialization
   initialize(): Promise<void>;
+  
+  // Database administration
+  clearDatabase(): Promise<void>;
 }
 
 export class PgStorage implements IStorage {
@@ -285,6 +288,37 @@ export class PgStorage implements IStorage {
       console.log("Database initialized successfully");
     } catch (error) {
       console.error("Error initializing database:", error);
+    }
+  }
+  
+  // Method to clear all data from the database
+  async clearDatabase(): Promise<void> {
+    try {
+      // Truncate all tables while preserving their structure
+      await pool.query(`
+        -- Disable foreign key constraints temporarily
+        SET CONSTRAINTS ALL DEFERRED;
+        
+        -- Truncate tables in order to avoid foreign key constraint violations
+        TRUNCATE chat_messages CASCADE;
+        TRUNCATE chat_users CASCADE;
+        TRUNCATE friendships CASCADE;
+        TRUNCATE friend_colors CASCADE;
+        TRUNCATE users CASCADE;
+        
+        -- Reset sequences for serial IDs
+        ALTER SEQUENCE users_id_seq RESTART WITH 1;
+        ALTER SEQUENCE friendships_id_seq RESTART WITH 1;
+        ALTER SEQUENCE friend_colors_id_seq RESTART WITH 1;
+        
+        -- Re-enable foreign key constraints
+        SET CONSTRAINTS ALL IMMEDIATE;
+      `);
+      
+      console.log("Database cleared successfully");
+    } catch (error) {
+      console.error("Error clearing database:", error);
+      throw error;
     }
   }
   
@@ -1077,6 +1111,25 @@ export class MemStorage implements IStorage {
   async initialize(): Promise<void> {
     // Nothing to initialize for memory storage
     return;
+  }
+  
+  async clearDatabase(): Promise<void> {
+    try {
+      // Clear all in-memory data structures
+      this.users.clear();
+      this.chatUsers.clear();
+      this.messages = [];
+      this.friendRequests.clear();
+      this.friendColors.clear();
+      
+      // Reset the current ID to 1
+      this.currentId = 1;
+      
+      console.log("In-memory database cleared successfully");
+    } catch (error) {
+      console.error("Error clearing in-memory database:", error);
+      throw error;
+    }
   }
 
   async getUser(id: number): Promise<User | undefined> {

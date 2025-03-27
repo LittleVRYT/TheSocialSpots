@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { UsernameModal } from "./username-modal";
 import { Header } from "./header";
 import { MessageList } from "./message-list";
@@ -9,6 +10,7 @@ import { FriendPanel } from "./friend-panel";
 import { SettingsPanel } from "./settings-panel";
 import { useChat } from "@/hooks/use-chat";
 import { useToast } from "@/hooks/use-toast";
+import { useIdleTimeout } from "@/hooks/use-idle-timeout";
 import { Globe, Wifi, Trophy, UserPlus, Settings } from "lucide-react";
 import { ChatRegion, ChatMessage } from "@shared/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +22,7 @@ export function ChatContainer() {
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const [isFriendPanelVisible, setIsFriendPanelVisible] = useState(false);
   const [isSettingsPanelVisible, setIsSettingsPanelVisible] = useState(false);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   
   const { 
@@ -147,6 +150,31 @@ export function ChatContainer() {
       });
     }
   }, [error, toast]);
+  
+  // Handle idle timeout (10 minutes)
+  const handleUserIdle = () => {
+    if (username) {
+      // Disconnect user
+      disconnect();
+      setUsername(null);
+      
+      // Show toast notification
+      toast({
+        title: "Session expired",
+        description: "You have been logged out due to inactivity",
+        variant: "default"
+      });
+      
+      // Redirect to login page
+      setLocation("/");
+    }
+  };
+  
+  // Set up idle timeout
+  useIdleTimeout({
+    onIdle: handleUserIdle,
+    idleTime: 10 // 10 minutes
+  });
 
   return (
     <div className="flex flex-col h-screen">
