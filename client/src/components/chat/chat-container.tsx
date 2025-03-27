@@ -163,7 +163,7 @@ export function ChatContainer() {
             </select>
           </div>
           
-          {/* Leaderboard Toggle */}
+          {/* Leaderboard & Friends Toggles */}
           <div className="flex items-center gap-2">
             <button
               onClick={toggleLeaderboard}
@@ -173,6 +173,21 @@ export function ChatContainer() {
             >
               <Trophy className="h-4 w-4" />
               <span className="text-xs font-medium">Leaderboard</span>
+            </button>
+            
+            <button
+              onClick={toggleFriendPanel}
+              className={`flex items-center gap-1 px-3 py-2 rounded-md border ${
+                isFriendPanelVisible ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white'
+              } relative`}
+            >
+              <UserPlus className="h-4 w-4" />
+              <span className="text-xs font-medium">Friends</span>
+              {friendRequests.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {friendRequests.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -186,6 +201,7 @@ export function ChatContainer() {
             messages={messages} 
             currentUsername={username || ''}
             users={users}
+            friends={friends}
             onAddReaction={addReaction}
             onRemoveReaction={removeReaction}
           />
@@ -223,6 +239,25 @@ export function ChatContainer() {
             </div>
             <Leaderboard visible={isLeaderboardVisible} />
           </div>
+        </div>
+        
+        {/* Friend Panel Sidebar */}
+        <div className={`h-full border-l w-80 flex-shrink-0 bg-background overflow-y-auto ${
+          isFriendPanelVisible ? 'block' : 'hidden'
+        } md:relative absolute right-0 top-0 bottom-0 z-50`}>
+          <FriendPanel
+            visible={isFriendPanelVisible}
+            currentUsername={username || ''}
+            allUsers={users}
+            friends={friends}
+            friendRequests={friendRequests}
+            onSendFriendRequest={sendFriendRequest}
+            onAcceptFriendRequest={acceptFriendRequest}
+            onRejectFriendRequest={rejectFriendRequest}
+            onRemoveFriend={removeFriend}
+            onUpdateFriendColor={updateFriendColor}
+            onClose={toggleFriendPanel}
+          />
         </div>
       </main>
     </div>

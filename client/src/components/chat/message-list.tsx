@@ -17,6 +17,7 @@ interface MessageListProps {
   }[];
   onAddReaction?: (messageId: string, emoji: string) => void;
   onRemoveReaction?: (messageId: string, emoji: string) => void;
+  friends?: { username: string; color?: string }[];
 }
 
 export function MessageList({ 
@@ -24,7 +25,8 @@ export function MessageList({
   currentUsername, 
   users = [], 
   onAddReaction, 
-  onRemoveReaction 
+  onRemoveReaction,
+  friends = []
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
@@ -114,6 +116,12 @@ export function MessageList({
   const formatTime = (timestamp: Date | string): string => {
     return format(new Date(timestamp), 'h:mm a');
   };
+  
+  // Get friend color if user is a friend
+  const getFriendColor = (username: string): string | undefined => {
+    const friend = friends.find(f => f.username === username);
+    return friend?.color;
+  };
 
   const getDateDisplay = (dateKey: string): string => {
     const date = new Date(dateKey);
@@ -159,7 +167,16 @@ export function MessageList({
                         </>
                       ) : (
                         <>
-                          <span className="font-medium text-gray-900 mr-2">{message.username}</span>
+                          {getFriendColor(message.username) ? (
+                            <span 
+                              className="font-medium mr-2" 
+                              style={{ color: getFriendColor(message.username) }}
+                            >
+                              {message.username}
+                            </span>
+                          ) : (
+                            <span className="font-medium text-gray-900 mr-2">{message.username}</span>
+                          )}
                           <span className="text-xs text-gray-500">{formatTime(message.timestamp)}</span>
                         </>
                       )}
