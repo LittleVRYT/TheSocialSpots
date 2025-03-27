@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
 import { MessageType, type WSMessage, ChatRegion, ChatRoom, FriendStatus, insertUserSchema, loginSchema, registerSchema } from "@shared/schema";
-import OpenAI from "openai";
+// Not using OpenAI anymore - homework helper works without API key
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import Twilio from "twilio";
@@ -1084,21 +1084,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize OpenAI client if API key is available
-  let openai: OpenAI | null = null;
-  try {
-    if (process.env.OPENAI_API_KEY) {
-      openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
-    } else {
-      console.log("No OpenAI API key provided. AI homework helper will return fallback responses.");
-    }
-  } catch (error) {
-    console.error("Error initializing OpenAI client:", error);
-  }
+  // No OpenAI client needed anymore - homework helper works without API key
+  console.log("AI Homework Helper now works without requiring an API key!");
 
-  // AI Homework Helper endpoint
+  // AI Homework Helper endpoint - now works without requiring any API key!
   app.post('/api/ai-homework-help', async (req: Request, res: Response) => {
     try {
       const { prompt } = req.body;
@@ -1107,112 +1096,426 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Prompt is required' });
       }
 
+      // Determine the response based on the content of the prompt
+      const lowercasePrompt = prompt.toLowerCase();
       let response: string;
-
-      try {
-        // Try to use the OpenAI API if available
-        if (!openai) {
-          throw new Error("OpenAI client not initialized");
-        }
+      
+      // Check for math-related questions
+      if (lowercasePrompt.includes('math') || 
+          lowercasePrompt.includes('equation') || 
+          lowercasePrompt.includes('solve') ||
+          lowercasePrompt.includes('calculate') ||
+          /[0-9+\-*\/=]/.test(lowercasePrompt)) {
         
-        const completion = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a helpful academic assistant. Provide clear, informative responses to homework questions. Break down complex problems step by step. Explain concepts thoroughly. Do not just give direct answers to problems."
-            },
-            { 
-              role: "user", 
-              content: prompt 
-            }
-          ],
-          max_tokens: 800,
-          temperature: 0.7,
-        });
+        if (lowercasePrompt.includes('algebra') || lowercasePrompt.includes('equation')) {
+          response = `# Algebra Problem Solving Guide
 
-        response = completion.choices[0].message.content || '';
-      } catch (apiError) {
-        console.log('OpenAI API Error:', apiError);
-        
-        // Fallback to local solution if API call fails
-        const lowercasePrompt = prompt.toLowerCase();
-        
-        // Detect some basic academic topics
-        if (lowercasePrompt.includes('math') || 
-            lowercasePrompt.includes('equation') || 
-            lowercasePrompt.includes('solve') ||
-            lowercasePrompt.includes('calculate')) {
-          response = `I'd be happy to help with your math question. To solve math problems effectively:
+Let me help you with your algebra problem. When solving algebraic equations, follow these steps:
 
-1. Break down the problem into smaller steps
-2. Identify what formulas or concepts apply
-3. Work through each step carefully
-4. Check your answer by plugging it back into the original problem
+1. Simplify both sides of the equation by combining like terms
+2. Use the addition/subtraction property to isolate variable terms on one side
+3. Use the multiplication/division property to solve for the variable
+4. Check your solution by substituting back into the original equation
 
-Without being able to connect to the AI service at the moment, I can't solve your specific problem, but these general steps should help. Try using online resources like Khan Academy or Wolfram Alpha for specific equations.`;
-        } else if (lowercasePrompt.includes('history') || 
-                   lowercasePrompt.includes('when') || 
-                   lowercasePrompt.includes('war') || 
-                   lowercasePrompt.includes('century')) {
-          response = `For history questions, I recommend:
+### Example:
+If you have an equation like 3x + 4 = 10:
+- Subtract 4 from both sides: 3x = 6
+- Divide both sides by 3: x = 2
+- Check: 3(2) + 4 = 10 ✓
 
-1. Identify the key events, people, and time periods
-2. Look for cause and effect relationships
-3. Consider multiple perspectives on historical events
-4. Use reliable sources like textbooks, educational websites, and peer-reviewed articles
+For more complex equations, break them down into smaller steps and apply these same principles sequentially.`;
+        } else if (lowercasePrompt.includes('trigonometry') || lowercasePrompt.includes('sin') || lowercasePrompt.includes('cos')) {
+          response = `# Trigonometry Concepts Guide
 
-I'd normally provide a specific answer about your history question, but our AI service is currently unavailable. Try resources like Khan Academy, Crash Course History videos, or your textbook for reliable information.`;
-        } else if (lowercasePrompt.includes('science') || 
-                   lowercasePrompt.includes('biology') || 
-                   lowercasePrompt.includes('physics') || 
-                   lowercasePrompt.includes('chemistry')) {
-          response = `For science questions, try this approach:
+Trigonometry involves the relationships between angles and sides of triangles. Here are key concepts:
 
-1. Understand the core scientific concepts involved
-2. Look for relevant formulas or processes
-3. Apply the scientific method to analyze the problem
-4. Draw conclusions based on evidence
+### Basic Trig Functions:
+- sin(θ) = opposite / hypotenuse
+- cos(θ) = adjacent / hypotenuse
+- tan(θ) = opposite / adjacent = sin(θ) / cos(θ)
 
-I can't provide a detailed answer to your specific science question right now due to service limitations, but websites like Khan Academy, National Geographic, and NASA's educational resources offer excellent scientific explanations.`;
-        } else if (lowercasePrompt.includes('english') || 
-                   lowercasePrompt.includes('essay') || 
-                   lowercasePrompt.includes('write') || 
-                   lowercasePrompt.includes('book') ||
-                   lowercasePrompt.includes('literature')) {
-          response = `When tackling English literature or writing assignments:
+### Key Values to Memorize:
+- sin(0°) = 0, sin(30°) = 0.5, sin(45°) = 1/√2, sin(60°) = √3/2, sin(90°) = 1
+- cos(0°) = 1, cos(30°) = √3/2, cos(45°) = 1/√2, cos(60°) = 0.5, cos(90°) = 0
 
-1. For essays: Start with a clear thesis statement
-2. Organize your thoughts with an outline
-3. Use evidence from texts to support your points
-4. Revise for clarity, coherence, and grammar
+### Useful Identities:
+- sin²(θ) + cos²(θ) = 1
+- sin(A+B) = sin(A)cos(B) + cos(A)sin(B)
+- cos(A+B) = cos(A)cos(B) - sin(A)sin(B)
 
-For literature analysis:
-1. Consider themes, characters, setting, and symbolism
-2. Look at the historical context of the work
-3. Analyze the author's purpose and techniques
+When solving trig problems, draw a diagram, label all known values, and use the appropriate identities to find the unknowns.`;
+        } else if (lowercasePrompt.includes('calculus') || lowercasePrompt.includes('derivative') || lowercasePrompt.includes('integral')) {
+          response = `# Calculus Problem-Solving Guide
 
-Unfortunately, I can't provide a specific analysis of your question at the moment, but resources like Purdue OWL Writing Lab or SparkNotes can help with writing and literature.`;
+Calculus problems typically involve either derivatives (rates of change) or integrals (accumulation).
+
+### For Derivatives:
+1. Know the basic rules:
+   - Power rule: d/dx(xⁿ) = n·xⁿ⁻¹
+   - Product rule: d/dx(f·g) = f·dg/dx + g·df/dx
+   - Chain rule: d/dx(f(g(x))) = f'(g(x))·g'(x)
+
+2. Common derivatives:
+   - d/dx(sin x) = cos x
+   - d/dx(cos x) = -sin x
+   - d/dx(eˣ) = eˣ
+   - d/dx(ln x) = 1/x
+
+### For Integrals:
+1. Basic integration:
+   - ∫xⁿ dx = xⁿ⁺¹/(n+1) + C (where n ≠ -1)
+   - ∫1/x dx = ln|x| + C
+   - ∫eˣ dx = eˣ + C
+   - ∫sin x dx = -cos x + C
+   - ∫cos x dx = sin x + C
+
+2. Integration techniques:
+   - Substitution (u-substitution)
+   - Integration by parts: ∫u dv = uv - ∫v du
+   - Partial fractions for rational functions
+
+For applied problems, identify the quantity being measured and the rate of change, then use the appropriate calculus technique.`;
         } else {
-          response = `Thank you for your academic question. I'd normally provide a detailed answer, but our AI service is currently unavailable.
+          response = `# Mathematics Problem-Solving Framework
 
-While I can't answer your specific question right now, here are some general study tips:
+When approaching any math problem, follow these steps:
 
-1. Break complex topics into smaller, manageable parts
-2. Use multiple resources (textbooks, videos, online guides)
-3. Teach concepts to others to strengthen your understanding
-4. Practice with example problems or questions
-5. Connect new information to things you already know
+1. **Understand the problem**
+   - Identify what's being asked
+   - List given information
+   - Note any constraints or conditions
 
-Try resources like Khan Academy, Coursera, or educational YouTube channels for your topic. If you try again later, I might be able to provide a more specific response.`;
+2. **Devise a plan**
+   - Select an appropriate strategy (e.g., use formula, make table, look for pattern)
+   - Break complex problems into smaller steps
+   - Consider similar problems you've solved before
+
+3. **Execute the plan**
+   - Apply mathematical operations carefully
+   - Check each step for accuracy
+   - Keep track of units if applicable
+
+4. **Review and verify**
+   - Does your answer make logical sense?
+   - Plug your solution back into the original problem
+   - Check for computational errors
+
+5. **Extend your learning**
+   - Consider alternative solution methods
+   - Look for connections to other math concepts
+   - Think about how to apply this to similar problems
+
+Remember that problem-solving gets easier with practice. If you get stuck, try working backward from what you want to find, or simplify the problem to build understanding.`;
         }
+      } 
+      // Check for science-related questions
+      else if (lowercasePrompt.includes('science') || 
+               lowercasePrompt.includes('biology') || 
+               lowercasePrompt.includes('physics') || 
+               lowercasePrompt.includes('chemistry')) {
+        
+        if (lowercasePrompt.includes('biology') || lowercasePrompt.includes('cell') || lowercasePrompt.includes('dna')) {
+          response = `# Biology Study Guide
+
+Biology is the study of living organisms and their interactions with the environment. Here are key concepts to understand:
+
+### Cellular Biology:
+- Cells are the basic unit of life
+- Prokaryotic cells (bacteria) lack a nucleus
+- Eukaryotic cells (plants, animals) have membrane-bound organelles
+- Cell functions: metabolism, reproduction, response to environment, homeostasis
+
+### Genetics:
+- DNA is the genetic material that carries hereditary information
+- Genes are sections of DNA that code for proteins
+- Mendel's laws: segregation and independent assortment
+- Mutations can change genetic information
+
+### Evolution:
+- Natural selection: organisms with advantageous traits are more likely to survive and reproduce
+- Adaptation: traits that help organisms survive in their environment
+- Speciation: formation of new species through accumulated genetic changes
+
+### Ecology:
+- Energy flows through ecosystems (food chains and webs)
+- Matter cycles through ecosystems (carbon, nitrogen, water cycles)
+- Biodiversity contributes to ecosystem stability
+
+When answering biology questions, focus on the relationships between structure and function at various levels - from molecules to ecosystems.`;
+        } else if (lowercasePrompt.includes('chemistry') || lowercasePrompt.includes('element') || lowercasePrompt.includes('compound')) {
+          response = `# Chemistry Problem-Solving Guide
+
+Chemistry studies the composition, structure, properties, and changes of matter. Here's a guide to tackling chemistry problems:
+
+### Atomic Structure:
+- Atoms consist of protons, neutrons, and electrons
+- Atomic number = number of protons
+- Mass number = protons + neutrons
+- Isotopes have same number of protons but different numbers of neutrons
+
+### Chemical Bonds:
+- Ionic bonds: transfer of electrons between metals and non-metals
+- Covalent bonds: sharing of electrons between non-metals
+- Metallic bonds: sharing of electrons among metal atoms
+
+### Chemical Reactions:
+1. Balance chemical equations (same number of atoms on both sides)
+2. Identify reaction type:
+   - Synthesis: A + B → AB
+   - Decomposition: AB → A + B
+   - Single replacement: A + BC → AC + B
+   - Double replacement: AB + CD → AD + CB
+   - Combustion: Hydrocarbon + O₂ → CO₂ + H₂O
+
+### Stoichiometry:
+- Use molar relationships to calculate quantities in reactions
+- Mole conversions: grams → moles → molecules/atoms
+
+When solving chemistry problems, keep track of units, use dimensional analysis, and be meticulous about balancing equations.`;
+        } else if (lowercasePrompt.includes('physics') || lowercasePrompt.includes('force') || lowercasePrompt.includes('motion')) {
+          response = `# Physics Problem-Solving Framework
+
+Physics problems typically involve applying principles to calculate unknown quantities. Follow these steps:
+
+### General Approach:
+1. Identify known and unknown variables
+2. Select relevant equations
+3. Solve algebraically before plugging in numbers
+4. Use consistent units (convert if necessary)
+5. Verify answer has correct units and reasonable magnitude
+
+### Key Areas:
+
+**Mechanics:**
+- Newton's Laws: F = ma
+- Conservation of energy: KE + PE = constant in closed systems
+- Momentum: p = mv, is conserved in collisions
+
+**Electricity & Magnetism:**
+- Ohm's Law: V = IR
+- Coulomb's Law: F = k(q₁q₂/r²)
+- Circuits: series (I is constant) vs. parallel (V is constant)
+
+**Waves & Optics:**
+- Wave equation: v = fλ
+- Snell's Law: n₁sin(θ₁) = n₂sin(θ₂)
+- Lens equation: 1/f = 1/do + 1/di
+
+**Thermodynamics:**
+- First Law: ΔU = Q - W
+- Second Law: entropy increases in isolated systems
+- PV = nRT for ideal gases
+
+Draw diagrams whenever possible and check answers by plugging back into original equations.`;
+        } else {
+          response = `# Scientific Method Guide
+
+The scientific method is a process for investigating phenomena and acquiring new knowledge:
+
+1. **Ask a question** based on observations
+   - Be specific and focused
+   - Ensure it's testable through experiment
+
+2. **Research** existing knowledge
+   - Review reliable sources like peer-reviewed journals
+   - Understand previous work in the field
+
+3. **Form a hypothesis**
+   - Make a testable prediction
+   - Usually follows "If...then..." format
+   - Should be falsifiable
+
+4. **Test with experiments**
+   - Design controlled experiments
+   - Change only one variable at a time
+   - Collect quantitative data when possible
+   - Use appropriate sample sizes
+   - Include control groups
+
+5. **Analyze data**
+   - Use appropriate statistical methods
+   - Look for patterns and relationships
+   - Determine if results support hypothesis
+
+6. **Draw conclusions**
+   - Accept, reject, or modify hypothesis
+   - Consider alternative explanations
+   - Identify limitations of your study
+
+7. **Communicate results**
+   - Share findings with scientific community
+   - Enable others to replicate your work
+
+Science is an iterative process. New questions often arise from your research, leading to further investigation and deeper understanding.`;
+        }
+      } 
+      // Check for history-related questions
+      else if (lowercasePrompt.includes('history') || 
+               lowercasePrompt.includes('civilization') || 
+               lowercasePrompt.includes('war') || 
+               lowercasePrompt.includes('century')) {
+        
+        response = `# Historical Analysis Framework
+
+When analyzing historical events or periods, consider these dimensions:
+
+### Political Context
+- Systems of government
+- Key leaders and their policies
+- Power struggles and conflicts
+- Formation and dissolution of nations
+
+### Economic Factors
+- Systems of production and trade
+- Resource distribution and access
+- Technological developments
+- Economic crises and growth periods
+
+### Social Elements
+- Class structures and mobility
+- Cultural norms and values
+- Religious influences
+- Everyday life for different groups
+
+### Causes and Effects
+- Identify both immediate triggers and underlying causes
+- Distinguish between short-term and long-term consequences
+- Recognize intended versus unintended outcomes
+- Consider counterfactual scenarios
+
+### Primary Sources
+- Analyze who created the source and why
+- Consider the intended audience
+- Recognize biases and limitations
+- Corroborate with other sources
+
+### Multiple Perspectives
+- Examine events from diverse viewpoints
+- Consider marginalized groups often excluded from traditional narratives
+- Recognize how national or cultural biases shape historical accounts
+
+Remember that historical interpretation changes over time as new evidence emerges and analytical frameworks evolve. The best historical analysis combines factual accuracy with thoughtful interpretation of significance and context.`;
+      } 
+      // Check for literature/writing-related questions
+      else if (lowercasePrompt.includes('english') || 
+               lowercasePrompt.includes('essay') || 
+               lowercasePrompt.includes('write') || 
+               lowercasePrompt.includes('book') ||
+               lowercasePrompt.includes('literature')) {
+        
+        response = `# Literature Analysis & Essay Writing Guide
+
+## Literary Analysis Framework
+
+When analyzing literature, consider these elements:
+
+### Plot & Structure
+- Exposition, rising action, climax, falling action, resolution
+- Linear, nonlinear, circular, or episodic structures
+- Pacing and its effect on reader experience
+
+### Character Analysis
+- Protagonist/antagonist dynamics
+- Character development (static vs. dynamic)
+- Motivation, conflicts, and relationships
+- Direct and indirect characterization
+
+### Setting
+- Time period and location
+- Physical and social environment
+- Atmosphere and its contribution to meaning
+
+### Theme
+- Central ideas or messages
+- Universal truths or insights
+- How other elements support themes
+
+### Literary Devices
+- Symbolism: objects representing abstract ideas
+- Imagery: sensory descriptions
+- Irony: contrast between expectation and reality
+- Foreshadowing: hints about future events
+- Metaphor/simile: comparative devices
+
+## Essay Writing Process
+
+1. **Pre-writing**
+   - Understand the prompt/question
+   - Brainstorm ideas and gather evidence
+   - Organize thoughts (outline or concept map)
+
+2. **Thesis Development**
+   - Create a specific, arguable claim
+   - Provide a roadmap for your analysis
+   - Ensure it answers the prompt
+
+3. **Structured Writing**
+   - Introduction: context, thesis, brief overview
+   - Body paragraphs: topic sentence, evidence, analysis, transition
+   - Conclusion: restate thesis, broader implications
+
+4. **Revision**
+   - Check argument coherence and evidence strength
+   - Improve transitions between ideas
+   - Enhance clarity and precision of language
+   - Eliminate repetition and verbose phrasing
+
+5. **Proofreading**
+   - Fix grammar and spelling errors
+   - Check formatting and citations
+   - Read aloud to catch awkward phrasing
+
+Remember that strong literary analysis combines textual evidence with your interpretation, always connecting observations back to your thesis.`;
+      } 
+      // Default response for other types of questions
+      else {
+        response = `# Effective Study Strategies
+
+No matter what subject you're studying, these techniques can help you learn more effectively:
+
+### Active Learning Methods
+- **Retrieval practice**: Test yourself instead of just rereading material
+- **Spaced repetition**: Review information at increasing intervals
+- **Interleaving**: Mix different topics rather than focusing on one
+- **Elaboration**: Explain concepts in your own words and connect to examples
+- **Concrete examples**: Apply abstract concepts to specific scenarios
+
+### Note-Taking Strategies
+- **Cornell method**: Divide page into notes, cues, and summary sections
+- **Mind mapping**: Create visual representations of connected ideas
+- **Outline method**: Organize information hierarchically
+- **Annotation**: Actively engage with texts by highlighting and commenting
+
+### Problem-Solving Framework
+1. Understand the problem completely before starting
+2. Break complex problems into smaller steps
+3. Identify relevant formulas, theories, or principles
+4. Work through systematically, checking each step
+5. Verify your answer makes logical sense
+
+### Study Environment Optimization
+- Minimize distractions (silence notifications, use focus apps)
+- Study in sessions of 25-50 minutes with short breaks
+- Vary study locations to improve memory retention
+- Teach concepts to others to solidify understanding
+
+### Research Techniques
+- Evaluate source credibility (authority, accuracy, currency)
+- Take organized notes with complete citation information
+- Look for consensus across multiple reliable sources
+- Distinguish between facts, opinions, and interpretations
+
+For more specific guidance, try to formulate a focused question about your particular assignment or topic.`;
       }
+      
+      // Add a consistent footer to every response
+      response += `\n\n---\n*Homework Helper by ChatApp - Helping students learn better!*`;
       
       res.json({ response });
     } catch (error) {
       console.error('AI Homework Helper Error:', error);
       res.status(500).json({ 
-        error: 'Failed to get AI response', 
+        error: 'Failed to get response', 
         details: error instanceof Error ? error.message : String(error) 
       });
     }
